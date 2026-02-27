@@ -104,7 +104,7 @@ for ki = 1:nL
             case 'doc'
                 kernels{ki,oi} = makeDoCapsuleKernel( ...
                     params.lengths(ki), params.width, params.wideWidth, ...
-                    oris(oi), single(params.alpha));
+                    oris(oi), params.alpha);
         end
     end
 end
@@ -112,7 +112,7 @@ end
 % -------------------------------------------------------------------------
 % accumulate maximum response across scale/orientation bank
 % -------------------------------------------------------------------------
-Rmax = -inf(size(I), 'single');
+Rmax = -inf(size(I));
 
 for ki = 1:nL
     for oi = 1:nO
@@ -139,22 +139,22 @@ end
 % =========================================================================
 
 function K = makeCapsuleKernel(len, width, angleDeg)
-% Single oriented Gaussian capsule kernel (single precision).
+% Single oriented Gaussian capsule kernel.
 r      = ceil(max(len/2, width/2)) + 6;
-[x, y] = meshgrid(single(-r:r), single(-r:r));
+[x, y] = meshgrid(-r:r, -r:r);
 
-theta  = single(-deg2rad(angleDeg));
+theta  = -deg2rad(angleDeg);
 xr     =  x .* cos(theta) - y .* sin(theta);
 yr     =  x .* sin(theta) + y .* cos(theta);
 
-sigmaW = single(max(width / 2.355, 0.5));
-sigmaL = single(max(len   / 4,     1.0));
+sigmaW = max(width / 2.355, 0.5);
+sigmaL = max(len   / 4,     1.0);
 
 K = exp(-(yr .^ 2) ./ (2 * sigmaW ^ 2)) ...
   .* exp(-(xr .^ 2) ./ (2 * sigmaL ^ 2));
 
 K = K - mean(K(:));
-K = K / (sum(abs(K(:))) + eps('single'));
+K = K / (sum(abs(K(:))) + eps);
 end
 
 % -------------------------------------------------------------------------
@@ -163,7 +163,7 @@ function K = makeDoCapsuleKernel(len, wNarrow, wWide, angleDeg, alpha)
 % Difference of Capsule kernels — oriented bandpass fibre detector.
 % Subtracts a weighted wide capsule surround from a narrow excitatory
 % centre, both at the same orientation and length.
-if nargin < 5, alpha = single(0.5); end
+if nargin < 5, alpha = 0.5; end
 
 K_inner = makeCapsuleKernel(len, wNarrow, angleDeg);
 K_outer = makeCapsuleKernel(len, wWide,   angleDeg);
@@ -171,5 +171,5 @@ K_outer = makeCapsuleKernel(len, wWide,   angleDeg);
 K = K_inner - alpha .* K_outer;
 
 K = K - mean(K(:));
-K = K / (sum(abs(K(:))) + eps('single'));
+K = K / (sum(abs(K(:))) + eps);
 end

@@ -19,62 +19,62 @@
 %
 % Prefiltering is intentionally NOT included (pipeline responsibility).
 
-%clear; 
+clear; 
 close all; clc;
 
 %% ---------------- Synthetic Test Image ----------------
 
-% rng(1);
-% h = 256; w = 256;
-% I = zeros(h,w);
-% 
-% % Circular blobs
-% radii = [3 3 4 4 5 5 6 6];
-% for r = radii
-%     cx = randi([30 220]);
-%     cy = randi([30 220]);
-%     [xx,yy] = meshgrid(1:w,1:h);
-%     mask = (xx-cx).^2 + (yy-cy).^2 <= r^2;
-%     I(mask) = I(mask) + 1;
-% end
-% 
-% % Elongated ellipses
-% for i = 1:6
-%     a = randi([8 12]);
-%     b = randi([6 8]);
-%     theta = rand()*pi;
-%     cx = randi([40 220]);
-%     cy = randi([40 220]);
-%     [xx,yy] = meshgrid(1:w,1:h);
-%     xRot =  (xx-cx)*cos(theta) + (yy-cy)*sin(theta);
-%     yRot = -(xx-cx)*sin(theta) + (yy-cy)*cos(theta);
-%     mask = (xRot.^2/a^2 + yRot.^2/b^2) <= 1;
-%     I(mask) = I(mask) + 1;
-% end
-% 
-% % Network lines
-% for i = 1:10
-%     x1 = randi([1 w]); y1 = randi([1 h]);
-%     x2 = randi([1 w]); y2 = randi([1 h]);
-%     lineMask = false(h,w);
-%     idx = round(linspace(0,1,200));
-%     xs = round(x1 + (x2-x1)*idx);
-%     ys = round(y1 + (y2-y1)*idx);
-%     valid = xs>0 & xs<=w & ys>0 & ys<=h;
-%     ind = sub2ind([h w], ys(valid), xs(valid));
-%     lineMask(ind) = true;
-%     I(lineMask) = I(lineMask) + 0.5;
-% end
-% 
-% % Blur + normalize
-% I = imgaussfilt(I,2);
-% I = I - min(I(:));
-% I = I ./ max(I(:));
-% 
-% % Add noise
-% I = imnoise(I,'gaussian',0,0.01);
-% 
-% %figure; imshow(I,[]); title('Synthetic Test Image');
+rng(1);
+h = 256; w = 256;
+I = zeros(h,w);
+
+% Circular blobs
+radii = [3 3 4 4 5 5 6 6];
+for r = radii
+    cx = randi([30 220]);
+    cy = randi([30 220]);
+    [xx,yy] = meshgrid(1:w,1:h);
+    mask = (xx-cx).^2 + (yy-cy).^2 <= r^2;
+    I(mask) = I(mask) + 1;
+end
+
+% Elongated ellipses
+for i = 1:6
+    a = randi([8 12]);
+    b = randi([6 8]);
+    theta = rand()*pi;
+    cx = randi([40 220]);
+    cy = randi([40 220]);
+    [xx,yy] = meshgrid(1:w,1:h);
+    xRot =  (xx-cx)*cos(theta) + (yy-cy)*sin(theta);
+    yRot = -(xx-cx)*sin(theta) + (yy-cy)*cos(theta);
+    mask = (xRot.^2/a^2 + yRot.^2/b^2) <= 1;
+    I(mask) = I(mask) + 1;
+end
+
+% Network lines
+for i = 1:10
+    x1 = randi([1 w]); y1 = randi([1 h]);
+    x2 = randi([1 w]); y2 = randi([1 h]);
+    lineMask = false(h,w);
+    idx = round(linspace(0,1,200));
+    xs = round(x1 + (x2-x1)*idx);
+    ys = round(y1 + (y2-y1)*idx);
+    valid = xs>0 & xs<=w & ys>0 & ys<=h;
+    ind = sub2ind([h w], ys(valid), xs(valid));
+    lineMask(ind) = true;
+    I(lineMask) = I(lineMask) + 0.5;
+end
+
+% Blur + normalize
+I = imgaussfilt(I,2);
+I = I - min(I(:));
+I = I ./ max(I(:));
+
+% Add noise
+I = imnoise(I,'gaussian',0,0.01);
+
+%figure; imshow(I,[]); title('Synthetic Test Image');
 
 %% ---------------- Compute LoG Seeds ----------------
 

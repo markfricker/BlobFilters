@@ -1,10 +1,11 @@
 % demoMitoEnhance.m
 %
-% Demo script: synthetic + real confocal mitochondria images → three enhancers
+% Demo script: synthetic + real confocal mitochondria images → four enhancers
 %
-%   logEnhance      – isotropic LoG bank (blob / puncta detection)
-%   fiberEnhance    – fibermetric-based tubular enhancer (IPT R2018b+)
-%   capsuleEnhance  – oriented capsule bank, single and DoC modes
+%   logEnhance          – isotropic LoG bank (blob / puncta detection)
+%   fiberEnhance        – fibermetric-based tubular enhancer (IPT R2018b+)
+%   capsuleEnhance      – oriented capsule bank, single and DoC modes
+%   granulometryEnhance – morphological pattern spectrum (scale-integrated opening residues)
 %
 % All enhancer functions and makeMitoTestImage.m must be on the MATLAB path.
 % The real image is loaded from mitImage.mat (variable I, uint16).
@@ -54,11 +55,20 @@ pCapD.orientations = 12;
 pCapD.mode         = 'doc';
 pCapD.normalize    = true;
 
+% --- granulometryEnhance --------------------------------------------------
+% Radii are chosen to span the mitochondrial cross-section (half-width to
+% full-width) and capture both puncta (~4 px radius) and wider tubules.
+% The pattern spectrum differentiates between successive disk openings, so
+% radii should be roughly evenly spaced in the range of interest.
+% Upper bound (r=16) is set to suppress larger background structures.
+pGran.sigmas    = [2 4 6 8 10 12 16];   % disk radii in px; width~8px → peak at r=4-8
+pGran.normalize = true;
+
 % =========================================================================
 % 3.  Run enhancers on BOTH images
 % =========================================================================
 images  = {Isynth, 'Synthetic'; Ireal, 'Real (mitImage)'};
-results = cell(2, 4);   % {logR, fibR, capSR, capDR} per image
+results = cell(2, 5);   % {logR, fibR, capSR, capDR, granR} per image
 
 for im = 1:2
     img = images{im,1};
@@ -84,6 +94,10 @@ for im = 1:2
     fprintf('  capsule DoC...        '); tic;
     results{im,4} = capsuleEnhance(img, pCapD);
     fprintf('%.2fs\n', toc);
+
+    fprintf('  granulometryEnhance.. '); tic;
+    results{im,5} = granulometryEnhance(img, pGran);
+    fprintf('%.2fs\n', toc);
 end
 
 % =========================================================================
@@ -108,49 +122,49 @@ end
 hold off;
 
 % =========================================================================
-% 5.  Figure 2 — synthetic image comparison panel
+% 5.  Figure 2 — synthetic image comparison panel (now 6 panels, 2x3)
 % =========================================================================
 titles2 = {'Raw (synthetic)', ...
            'logEnhance', ...
            'fiberEnhance', ...
            'capsule single', ...
-           'capsule DoC'};
-panels2 = {Isynth, results{1,1}, results{1,2}, results{1,3}, results{1,4}};
+           'capsule DoC', ...
+           'granulometry'};
+panels2 = {Isynth, results{1,1}, results{1,2}, results{1,3}, results{1,4}, results{1,5}};
 
 figure(2);
 set(gcf,'Name','Synthetic — Enhancement Comparison','NumberTitle','off', ...
         'Color','k','Position',[30 30 1250 840]);
-cmaps = {'gray','hot','hot','hot','hot'};
-for k = 1:5
+cmaps = {'gray','hot','hot','hot','hot','hot'};
+for k = 1:6
     ax = subplot(2,3,k);
     imshow(panels2{k},[]); colormap(ax, cmaps{k});
     title(titles2{k},'Color','w','FontSize',10);
     set(ax,'XColor','none','YColor','none');
 end
-subplot(2,3,6); axis off;
 sgtitle('Synthetic Image — Enhancement Comparison', ...
         'Color','w','FontSize',13,'FontWeight','bold');
 
 % =========================================================================
-% 6.  Figure 3 — real image comparison panel
+% 6.  Figure 3 — real image comparison panel (now 6 panels, 2x3)
 % =========================================================================
 titles3 = {'Raw (real)', ...
            'logEnhance', ...
            'fiberEnhance', ...
            'capsule single', ...
-           'capsule DoC'};
-panels3 = {Ireal, results{2,1}, results{2,2}, results{2,3}, results{2,4}};
+           'capsule DoC', ...
+           'granulometry'};
+panels3 = {Ireal, results{2,1}, results{2,2}, results{2,3}, results{2,4}, results{2,5}};
 
 figure(3);
 set(gcf,'Name','Real Image — Enhancement Comparison','NumberTitle','off', ...
         'Color','k','Position',[60 60 1250 840]);
-for k = 1:5
+for k = 1:6
     ax = subplot(2,3,k);
     imshow(panels3{k},[]); colormap(ax, cmaps{k});
     title(titles3{k},'Color','w','FontSize',10);
     set(ax,'XColor','none','YColor','none');
 end
-subplot(2,3,6); axis off;
 sgtitle('Real Image — Enhancement Comparison', ...
         'Color','w','FontSize',13,'FontWeight','bold');
 
@@ -191,8 +205,6 @@ sgtitle('DoC surround-suppression on clustered region', ...
 % =========================================================================
 % 8.  Figure 5 — DoC vs single on real image
 % =========================================================================
-diff_real = results{2,4} - results{2,3};
-
 figure(5);
 set(gcf,'Name','DoC vs Single — Real','NumberTitle','off', ...
         'Color','k','Position',[120 120 900 420]);
@@ -210,4 +222,64 @@ set(ax5,'XColor','none','YColor','none');
 sgtitle('Real Image — Single vs DoC', ...
         'Color','w','FontSize',13,'FontWeight','bold');
 
-fprintf('\nDone. Five figures generated.\n');
+% =========================================================================
+% 9.  Figure 6 — granulometry vs logEnhance comparison
+%     Both methods integrate responses across spatial scales; this figure
+%     shows where the morphological (granulometry) and Laplacian-of-Gaussian
+%     approaches agree and diverge on the same scene.
+% =========================================================================
+diff_gran_log_synth = results{1,5} - results{1,1};
+diff_gran_log_real  = results{2,5} - results{2,1};
+
+figure(6);
+set(gcf,'Name','Granulometry vs LoG','NumberTitle','off', ...
+        'Color','k','Position',[150 150 1250 840]);
+
+% Row 1: synthetic
+ax6 = subplot(2,4,1);
+imshow(Isynth,[]); colormap(ax6,'gray');
+title('Raw (synthetic)','Color','w','FontSize',10);
+set(ax6,'XColor','none','YColor','none');
+
+ax7 = subplot(2,4,2);
+imshow(results{1,1},[]); colormap(ax7,'hot');
+title('logEnhance','Color','w','FontSize',10);
+set(ax7,'XColor','none','YColor','none');
+
+ax8 = subplot(2,4,3);
+imshow(results{1,5},[]); colormap(ax8,'hot');
+title('granulometry','Color','w','FontSize',10);
+set(ax8,'XColor','none','YColor','none');
+
+ax9 = subplot(2,4,4);
+imshow(diff_gran_log_synth,[-0.5 0.5]); colormap(ax9,bwr);
+cb2 = colorbar; cb2.Color = 'w';
+title('Gran − LoG (synthetic)','Color','w','FontSize',10);
+set(ax9,'XColor','none','YColor','none');
+
+% Row 2: real
+ax10 = subplot(2,4,5);
+imshow(Ireal,[]); colormap(ax10,'gray');
+title('Raw (real)','Color','w','FontSize',10);
+set(ax10,'XColor','none','YColor','none');
+
+ax11 = subplot(2,4,6);
+imshow(results{2,1},[]); colormap(ax11,'hot');
+title('logEnhance','Color','w','FontSize',10);
+set(ax11,'XColor','none','YColor','none');
+
+ax12 = subplot(2,4,7);
+imshow(results{2,5},[]); colormap(ax12,'hot');
+title('granulometry','Color','w','FontSize',10);
+set(ax12,'XColor','none','YColor','none');
+
+ax13 = subplot(2,4,8);
+imshow(diff_gran_log_real,[-0.5 0.5]); colormap(ax13,bwr);
+cb3 = colorbar; cb3.Color = 'w';
+title('Gran − LoG (real)','Color','w','FontSize',10);
+set(ax13,'XColor','none','YColor','none');
+
+sgtitle('Granulometry vs LoG — Scale-integrated morphological vs Laplacian response', ...
+        'Color','w','FontSize',13,'FontWeight','bold');
+
+fprintf('\nDone. Six figures generated.\n');
