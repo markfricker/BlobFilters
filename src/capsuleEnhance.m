@@ -163,7 +163,7 @@ K = exp(-(yr .^ 2) ./ (2 * sigmaW ^ 2)) ...
   .* exp(-(xr .^ 2) ./ (2 * sigmaL ^ 2));
 
 K = K - mean(K(:));
-K = single(K / (sum(abs(K(:))) + eps));
+K = K / (sum(abs(K(:))) + eps);   % keep double — imfilter requires double kernel
 end
 
 % -------------------------------------------------------------------------
@@ -212,5 +212,5 @@ K_outer = exp(-(yr.^2) ./ (2*sigWw^2)) ...
 K = K_inner - alpha .* K_outer;
 
 K = K - mean(K(:));
-K = single(K / (sum(abs(K(:))) + eps));
+K = K / (sum(abs(K(:))) + eps);   % keep double — imfilter requires double kernel
 end
