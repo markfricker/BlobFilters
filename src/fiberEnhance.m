@@ -1,37 +1,70 @@
 function R = fiberEnhance(I, params)
-% fiberEnhance  Multi-scale fibermetric enhancement for mitochondria
+% fiberEnhance  Multi-scale Hessian-based tubular ridge enhancer
 %
-% R = fiberEnhance(I, params)
+% USAGE
+%   R = fiberEnhance(I)
+%   R = fiberEnhance(I, params)
 %
 % INPUTS
-%   I       - grayscale image, double or integer class, 2-D
+%   I       - 2-D grayscale image (uint8, uint16, or float); converted to
+%             single [0,1] internally.
 %   params  - optional struct with fields:
-%            .widths    = [3 4 5 6]   % object widths in pixels to probe
-%            .multimode = 'builtin'   % 'builtin': pass all widths at once to
-%                                     %   fibermetric (recommended, MathWorks
-%                                     %   implementation selects best scale
-%                                     %   per pixel internally)
-%                                     % 'stack': compute per-width and take
-%                                     %   max (mirrors logEnhance behaviour,
-%                                     %   useful for debugging scale responses)
-%            .normalize = true        % normalize output to [0,1]
+%            .widths    = [6 7 8 9 10]  % cross-sectional widths to probe (px)
+%            .multimode = 'builtin'     % aggregation strategy (see below)
+%            .normalize = true          % rescale output to [0,1]
 %
 % OUTPUT
-%   R       - enhancement map in [0,1], higher => more rod-like bright structure
+%   R       - enhancement map, single precision, same size as I.
+%             Higher values indicate bright, elongated tubular structure.
+%
+% OVERVIEW
+%   Wraps the MATLAB Image Processing Toolbox function fibermetric, which
+%   implements a Frangi-style vesselness / tubularity measure based on the
+%   eigenvalues of the local image Hessian.
+%
+%   At each scale w, the Hessian H of the Gaussian-smoothed image is
+%   computed (sigma proportional to w).  For a bright tubular ridge, the
+%   smaller eigenvalue lambda_1 is large and negative while the larger
+%   lambda_2 is near zero; the tubularity score at scale w is:
+%
+%       S_w = exp(-lambda_1) * (1 - exp(lambda_2 / c))
+%
+%   where c is an automatic scale factor.  fibermetric aggregates S_w over
+%   all requested widths and returns the per-pixel best-scale response.
+%
+%   MULTIMODE OPTIONS
+%   'builtin' (default) — passes all widths to fibermetric at once.
+%             MathWorks selects the best-scale response per pixel internally.
+%             This is the recommended mode and is fastest.
+%   'stack'   — calls fibermetric once per width and takes the pixel-wise
+%               maximum.  Mirrors the logEnhance rolling-max pattern and
+%               permits inspection of individual scale contributions.
+%
+%   Width values should span the *short axis* (cross-sectional width) of
+%   the target structure, not the long axis.  For 6-8 px wide mitochondria,
+%   widths = [6 7 8 9 10] is appropriate.
 %
 % NOTES
-%   fibermetric targets tubular/ridge structures via Hessian eigenanalysis
-%   (Frangi-style). It is inherently more selective for elongated objects than
-%   isotropic LoG, making it better suited to mitochondria.
+%   - Requires Image Processing Toolbox R2018b or later (fibermetric).
+%   - fibermetric internally uses 'bright' object polarity (bright on dark).
 %
-%   Width values should span the *short axis* (width) of the target, not the
-%   long axis. For 6-8 px wide mitochondria, widths = [4 5 6 7] is appropriate.
-%   Erring slightly narrow (3-6) avoids responding to larger organelles.
+% REFERENCES
+%   Frangi A.F. et al. (1998) Multiscale vessel enhancement filtering.
+%   In: Wells W.M. et al. (eds) MICCAI 1998, LNCS 1496, pp. 130-137.
+%   Springer, Berlin. https://doi.org/10.1007/BFb0056195
+%     -> Original Hessian-based tubularity / vesselness filter.
 %
-%   Requires Image Processing Toolbox R2018b or later.
+%   MathWorks (2025) fibermetric — Image Processing Toolbox R2025b.
+%   https://uk.mathworks.com/help/images/ref/fibermetric.html
+%     -> MATLAB implementation used by this wrapper.
 %
 % EXAMPLE
-%   R = fiberEnhance(I, struct('widths', [3 4 5 6], 'multimode', 'builtin'));
+%   pFib.widths    = [6 7 8 9 10];
+%   pFib.multimode = 'builtin';
+%   pFib.normalize = true;
+%   R = fiberEnhance(I, pFib);
+%
+% See also: rodGranulometryEnhance, capsuleEnhance, logEnhance
 
 if nargin < 2, params = struct(); end
 if ~isfield(params, 'widths'),    params.widths    = [6 7 8 9 10];   end
