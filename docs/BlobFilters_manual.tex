@@ -1,4 +1,7 @@
 %% BlobFilters_manual.tex
+%% natbib is loaded by tufte-book; force numerical citation style so that
+%% a plain thebibliography environment is compatible.
+\PassOptionsToPackage{numbers,sort&compress}{natbib}
 %%
 %% Manual for the BlobFilters MATLAB toolbox.
 %% Typeset with the Tufte-LaTeX book class.
@@ -171,7 +174,7 @@ smoothed by two 1-D Gaussian passes\sidenote{%
   \texttt{imfilter} requires the kernel to be of class \texttt{double}
   regardless of the image class; both the 1-D Gaussian and the Laplacian are
   kept as \texttt{double}.}
-and then filtered with the compact 3{\x}3 discrete Laplacian
+and then filtered with the compact $3\times3$ discrete Laplacian
 $\ell = [0,1,0;\,1,-4,1;\,0,1,0]$.  This reduces the per-scale cost from
 $O(N^2(6\sigma)^2)$ to $O(N^2 \cdot 6\sigma)$, approximately a $6\times$
 speedup at $\sigma=6$.
@@ -320,7 +323,7 @@ gives zero response.
   DoC inhibitory weight $\in(0,1)$. Default \texttt{0.5}.
   \medskip\par
   \textbf{\texttt{orientations}} \newline
-  Number of angles in $[0°,180°)$. Default \texttt{12}.
+  Number of angles in $[0^\circ,180^\circ)$. Default \texttt{12}.
   \medskip\par
   \textbf{\texttt{mode}} \newline
   \texttt{'single'} or \texttt{'doc'}. Default \texttt{'single'}.
@@ -369,7 +372,7 @@ granulometry.
   Rod of length $L_\text{rod}$ responds at the largest $L_k < L_\text{rod}$.
   \medskip\par
   \textbf{\texttt{orientations}} \newline
-  Number of angles in $[0°,180°)$. Default \texttt{8}.
+  Number of angles in $[0^\circ,180^\circ)$. Default \texttt{8}.
   \medskip\par
   \textbf{\texttt{normalize}} Default \texttt{true}.
 }
@@ -483,7 +486,7 @@ $\sigma_\parallel$ along the fibre with minimal blurring across it.
   Keep small to preserve cross-fibre boundaries.
   \medskip\par
   \textbf{\texttt{orientations}} \newline
-  Discrete angles in $[0°,180°)$. Default \texttt{8}.
+  Discrete angles in $[0^\circ,180^\circ)$. Default \texttt{8}.
   \medskip\par
   \textbf{\texttt{sigmaGrad}, \texttt{sigmaInt}} \newline
   Internal structure tensor scales. Defaults \texttt{1.5} and \texttt{5}.
