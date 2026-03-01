@@ -1,11 +1,14 @@
 % demoMitoEnhance.m
 %
-% Demo script: synthetic + real confocal mitochondria images → four enhancers
+% Demo script: synthetic + real confocal mitochondria images → five enhancers
 %
-%   logEnhance          – isotropic LoG bank (blob / puncta detection)
-%   fiberEnhance        – fibermetric-based tubular enhancer (IPT R2018b+)
-%   capsuleEnhance      – oriented capsule bank, single and DoC modes
-%   granulometryEnhance – morphological pattern spectrum (scale-integrated opening residues)
+%   logEnhance              – isotropic LoG bank (blob / puncta detection)
+%   fiberEnhance            – fibermetric-based tubular enhancer (IPT R2018b+)
+%   capsuleEnhance          – oriented capsule bank, single and DoC modes
+%   granulometryEnhance     – morphological pattern spectrum (scale-integrated opening residues)
+%   structureTensorEnhance  – local coherence index C ∈ [0,1]; applied as
+%                             a multiplicative weight after other enhancers
+%                             to separate rods (C→1) from puncta (C→0)
 %
 % All enhancer functions and makeMitoTestImage.m must be on the MATLAB path.
 % The real image is loaded from mitImage.mat (variable I, uint16).
@@ -64,11 +67,19 @@ pCapD.normalize    = true;
 pGran.sigmas    = [2 4 6 8 10 12 16];   % disk radii in px; width~8px → peak at r=4-8
 pGran.normalize = true;
 
+% --- structureTensorEnhance -----------------------------------------------
+% sigmaGrad: gradient smoothing scale — suppress pixel-level noise.
+% sigmaInt : integration scale — should match structure half-width (~4-5 px).
+% normalize: rescale C to [0,1] so it acts as a clean [0,1] weight.
+pST.sigmaGrad  = 1.5;
+pST.sigmaInt   = 5;
+pST.normalize  = true;
+
 % =========================================================================
 % 3.  Run enhancers on BOTH images
 % =========================================================================
 images  = {Isynth, 'Synthetic'; Ireal, 'Real (mitImage)'};
-results = cell(2, 5);   % {logR, fibR, capSR, capDR, granR} per image
+results = cell(2, 6);   % {logR, fibR, capSR, capDR, granR, coherR} per image
 
 for im = 1:2
     img = images{im,1};
@@ -97,6 +108,10 @@ for im = 1:2
 
     fprintf('  granulometryEnhance.. '); tic;
     results{im,5} = granulometryEnhance(img, pGran);
+    fprintf('%.2fs\n', toc);
+
+    fprintf('  structureTensor...    '); tic;
+    results{im,6} = structureTensorEnhance(img, pST);
     fprintf('%.2fs\n', toc);
 end
 
@@ -282,4 +297,56 @@ set(ax13,'XColor','none','YColor','none');
 sgtitle('Granulometry vs LoG — Scale-integrated morphological vs Laplacian response', ...
         'Color','w','FontSize',13,'FontWeight','bold');
 
-fprintf('\nDone. Six figures generated.\n');
+% =========================================================================
+% 10. Figure 7 — Structure tensor coherence: rod vs puncta separation
+%
+%     Coherence C ≈ 1 for elongated rods/fibres, C ≈ 0 for isotropic
+%     puncta and noise.  Applied as a multiplicative weight:
+%
+%       DoC × C       → rod / tubular channel   (puncta suppressed)
+%       LoG × (1−C)   → puncta channel          (rods suppressed)
+%
+%     Both derived maps are individually rescaled to [0,1] for display.
+% =========================================================================
+figure(7);
+set(gcf,'Name','Structure Tensor Coherence','NumberTitle','off', ...
+        'Color','k','Position',[180 180 1250 840]);
+
+for im = 1:2
+    C      = results{im,6};          % coherence map
+    capDoc = results{im,4};          % capsule DoC — rod-selective enhancer
+    logR   = results{im,1};          % logEnhance  — puncta-inclusive enhancer
+    lbl    = images{im,2};
+
+    rodW    = capDoc .* C;
+    mx = max(rodW(:));   if mx > 0, rodW    = rodW    / mx; end
+
+    punctaW = logR .* (1 - C);
+    mx = max(punctaW(:)); if mx > 0, punctaW = punctaW / mx; end
+
+    base = (im-1)*4;
+
+    ax = subplot(2,4, base+1);
+    imshow(images{im,1},[]); colormap(ax,'gray');
+    title(sprintf('Raw (%s)', lbl),'Color','w','FontSize',9);
+    set(ax,'XColor','none','YColor','none');
+
+    ax = subplot(2,4, base+2);
+    imshow(C,[]); colormap(ax,'parula');
+    title('Coherence C','Color','w','FontSize',9);
+    set(ax,'XColor','none','YColor','none');
+
+    ax = subplot(2,4, base+3);
+    imshow(rodW,[]); colormap(ax,'hot');
+    title('DoC \times C  (rods)','Color','w','FontSize',9);
+    set(ax,'XColor','none','YColor','none');
+
+    ax = subplot(2,4, base+4);
+    imshow(punctaW,[]); colormap(ax,'hot');
+    title('LoG \times (1-C)  (puncta)','Color','w','FontSize',9);
+    set(ax,'XColor','none','YColor','none');
+end
+sgtitle('Structure Tensor Coherence — Rod vs Puncta separation', ...
+        'Color','w','FontSize',13,'FontWeight','bold');
+
+fprintf('\nDone. Seven figures generated.\n');
