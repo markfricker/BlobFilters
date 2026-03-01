@@ -1,11 +1,12 @@
 % demoMitoEnhance.m
 %
-% Demo script: synthetic + real confocal mitochondria images → five enhancers
+% Demo script: synthetic + real confocal mitochondria images → six enhancers
 %
 %   logEnhance              – isotropic LoG bank (blob / puncta detection)
 %   fiberEnhance            – fibermetric-based tubular enhancer (IPT R2018b+)
 %   capsuleEnhance          – oriented capsule bank, single and DoC modes
-%   granulometryEnhance     – morphological pattern spectrum (scale-integrated opening residues)
+%   granulometryEnhance     – disk-based pattern spectrum (isotropic scale integration)
+%   rodGranulometryEnhance  – oriented linear pattern spectrum (rod/fibre selective)
 %   structureTensorEnhance  – local coherence index C ∈ [0,1]; applied as
 %                             a multiplicative weight after other enhancers
 %                             to separate rods (C→1) from puncta (C→0)
@@ -67,6 +68,15 @@ pCapD.normalize    = true;
 pGran.sigmas    = [2 4 6 8 10 12 16];   % disk radii in px; width~8px → peak at r=4-8
 pGran.normalize = true;
 
+% --- rodGranulometryEnhance -----------------------------------------------
+% Same length range as capsuleEnhance.  Line SEs inherently suppress compact
+% puncta (a round object cannot survive a line opening longer than its
+% diameter), so this enhancer is selective for elongated structures without
+% needing a coherence post-weight.
+pRodGran.lengths      = [8 12 16 20 28 36];  % line lengths in px
+pRodGran.orientations = 8;                    % angles in [0,180)
+pRodGran.normalize    = true;
+
 % --- structureTensorEnhance -----------------------------------------------
 % sigmaGrad: gradient smoothing scale — suppress pixel-level noise.
 % sigmaInt : integration scale — should match structure half-width (~4-5 px).
@@ -79,7 +89,7 @@ pST.normalize  = true;
 % 3.  Run enhancers on BOTH images
 % =========================================================================
 images  = {Isynth, 'Synthetic'; Ireal, 'Real (mitImage)'};
-results = cell(2, 6);   % {logR, fibR, capSR, capDR, granR, coherR} per image
+results = cell(2, 7);   % {logR, fibR, capSR, capDR, granR, rodGranR, coherR} per image
 
 for im = 1:2
     img = images{im,1};
@@ -110,8 +120,12 @@ for im = 1:2
     results{im,5} = granulometryEnhance(img, pGran);
     fprintf('%.2fs\n', toc);
 
+    fprintf('  rodGranulometry...    '); tic;
+    results{im,6} = rodGranulometryEnhance(img, pRodGran);
+    fprintf('%.2fs\n', toc);
+
     fprintf('  structureTensor...    '); tic;
-    results{im,6} = structureTensorEnhance(img, pST);
+    results{im,7} = structureTensorEnhance(img, pST);
     fprintf('%.2fs\n', toc);
 end
 
@@ -313,7 +327,7 @@ set(gcf,'Name','Structure Tensor Coherence','NumberTitle','off', ...
         'Color','k','Position',[180 180 1250 840]);
 
 for im = 1:2
-    C      = results{im,6};          % coherence map
+    C      = results{im,7};          % coherence map
     capDoc = results{im,4};          % capsule DoC — rod-selective enhancer
     logR   = results{im,1};          % logEnhance  — puncta-inclusive enhancer
     lbl    = images{im,2};
@@ -349,4 +363,73 @@ end
 sgtitle('Structure Tensor Coherence — Rod vs Puncta separation', ...
         'Color','w','FontSize',13,'FontWeight','bold');
 
-fprintf('\nDone. Seven figures generated.\n');
+% =========================================================================
+% 11. Figure 8 — Rod vs disk granulometry comparison
+%
+%     Disk granulometry (granulometryEnhance) integrates responses from
+%     isotropic disk openings: it responds to both compact puncta and short
+%     rods at the same scale.
+%
+%     Rod granulometry (rodGranulometryEnhance) uses oriented line openings:
+%     compact puncta cannot survive a line opening longer than their diameter,
+%     so the response is inherently selective for elongated structures without
+%     needing coherence post-weighting.
+%
+%     The difference map (disk − rod) highlights where disk gran responds to
+%     round/compact structures that rod gran suppresses.
+% =========================================================================
+diff_rod_disk_synth = results{1,5} - results{1,6};   % disk − rod (synthetic)
+diff_rod_disk_real  = results{2,5} - results{2,6};   % disk − rod (real)
+
+figure(8);
+set(gcf,'Name','Rod vs Disk Granulometry','NumberTitle','off', ...
+        'Color','k','Position',[210 210 1250 840]);
+
+% Row 1: synthetic
+ax14 = subplot(2,4,1);
+imshow(Isynth,[]); colormap(ax14,'gray');
+title('Raw (synthetic)','Color','w','FontSize',10);
+set(ax14,'XColor','none','YColor','none');
+
+ax15 = subplot(2,4,2);
+imshow(results{1,5},[]); colormap(ax15,'hot');
+title('Disk gran','Color','w','FontSize',10);
+set(ax15,'XColor','none','YColor','none');
+
+ax16 = subplot(2,4,3);
+imshow(results{1,6},[]); colormap(ax16,'hot');
+title('Rod gran','Color','w','FontSize',10);
+set(ax16,'XColor','none','YColor','none');
+
+ax17 = subplot(2,4,4);
+imshow(diff_rod_disk_synth,[-0.5 0.5]); colormap(ax17,bwr);
+cb4 = colorbar; cb4.Color = 'w';
+title('Disk − Rod (synthetic)','Color','w','FontSize',10);
+set(ax17,'XColor','none','YColor','none');
+
+% Row 2: real
+ax18 = subplot(2,4,5);
+imshow(Ireal,[]); colormap(ax18,'gray');
+title('Raw (real)','Color','w','FontSize',10);
+set(ax18,'XColor','none','YColor','none');
+
+ax19 = subplot(2,4,6);
+imshow(results{2,5},[]); colormap(ax19,'hot');
+title('Disk gran','Color','w','FontSize',10);
+set(ax19,'XColor','none','YColor','none');
+
+ax20 = subplot(2,4,7);
+imshow(results{2,6},[]); colormap(ax20,'hot');
+title('Rod gran','Color','w','FontSize',10);
+set(ax20,'XColor','none','YColor','none');
+
+ax21 = subplot(2,4,8);
+imshow(diff_rod_disk_real,[-0.5 0.5]); colormap(ax21,bwr);
+cb5 = colorbar; cb5.Color = 'w';
+title('Disk − Rod (real)','Color','w','FontSize',10);
+set(ax21,'XColor','none','YColor','none');
+
+sgtitle('Rod vs Disk Granulometry — Line openings suppress compact puncta', ...
+        'Color','w','FontSize',13,'FontWeight','bold');
+
+fprintf('\nDone. Eight figures generated.\n');
