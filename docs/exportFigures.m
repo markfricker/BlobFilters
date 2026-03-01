@@ -35,26 +35,16 @@ addpath(fullfile(rootDir, 'src'));
 addpath(fullfile(rootDir, 'demos'));
 
 % =========================================================================
-% Helper: export a figure handle to PDF, then close it
-% =========================================================================
-    function saveFig(h, filename)
-        outPath = fullfile(outDir, filename);
-        exportgraphics(h, outPath, 'ContentType', 'vector', 'Resolution', 300);
-        fprintf('  saved %s\n', filename);
-        close(h);
-    end
-
-% =========================================================================
 % 1.  Run demoMitoEnhance (generates Figures 1-8)
 % =========================================================================
 fprintf('Running demoMitoEnhance...\n');
 demoMitoEnhance;
 
-saveFig(figure(1), 'fig01_synthetic_annotated.pdf');
-saveFig(figure(2), 'fig02_comparison_synth.pdf');
-saveFig(figure(3), 'fig03_comparison_real.pdf');
-saveFig(figure(7), 'fig04_coherence_separation.pdf');
-saveFig(figure(8), 'fig05_rod_vs_disk.pdf');
+saveFig(figure(1), outDir, 'fig01_synthetic_annotated.pdf');
+saveFig(figure(2), outDir, 'fig02_comparison_synth.pdf');
+saveFig(figure(3), outDir, 'fig03_comparison_real.pdf');
+saveFig(figure(7), outDir, 'fig04_coherence_separation.pdf');
+saveFig(figure(8), outDir, 'fig05_rod_vs_disk.pdf');
 close all;
 
 % =========================================================================
@@ -63,10 +53,23 @@ close all;
 fprintf('Running demoPrefilter...\n');
 demoPrefilter;
 
-saveFig(figure(1), 'fig06_prefilter_raw.pdf');
-saveFig(figure(2), 'fig07_prefilter_pm.pdf');
-saveFig(figure(3), 'fig08_prefilter_guided.pdf');
-saveFig(figure(4), 'fig09_prefilter_ogs.pdf');
+saveFig(figure(1), outDir, 'fig06_prefilter_raw.pdf');
+saveFig(figure(2), outDir, 'fig07_prefilter_pm.pdf');
+saveFig(figure(3), outDir, 'fig08_prefilter_guided.pdf');
+saveFig(figure(4), outDir, 'fig09_prefilter_ogs.pdf');
 close all;
 
 fprintf('\nAll figures exported to %s\n', outDir);
+
+% =========================================================================
+% Helper: export a figure handle to PDF, then close it.
+%
+% outDir is passed explicitly because local functions defined at the bottom
+% of a script do not share the script's base workspace in MATLAB.
+% =========================================================================
+function saveFig(h, outDir, filename)
+    outPath = fullfile(outDir, filename);
+    exportgraphics(h, outPath, 'ContentType', 'vector', 'Resolution', 300);
+    fprintf('  saved %s\n', filename);
+    close(h);
+end
