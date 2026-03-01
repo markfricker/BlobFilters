@@ -56,6 +56,9 @@ function R = capsuleEnhance(I, params)
 %   - Input must be a 2-D grayscale image (uint8, uint16, or float).
 %   - All computation is performed in single precision.
 %   - Requires Image Processing Toolbox for imfilter.
+%   - Parallel execution (parfor) is used automatically if a parallel pool
+%     is already open. Call parpool() before capsuleEnhance to enable this;
+%     starting a pool inside the function would cost ~25 s of overhead.
 %
 % See also: logEnhance, fiberEnhance, fibermetric, imfilter
 
@@ -117,9 +120,13 @@ end
 
 % -------------------------------------------------------------------------
 % accumulate maximum response across scale/orientation bank
+% Use parfor only if a parallel pool is already open — starting one here
+% costs ~25 s and outweighs the benefit for typical kernel bank sizes.
+% Call parpool() before capsuleEnhance to enable parallel execution.
 % -------------------------------------------------------------------------
 responses = cell(1, nKernels);
-if license('test', 'Distrib_Computing_Toolbox')
+useParfor  = ~isempty(gcp('nocreate'));
+if useParfor
     parfor ki = 1:nKernels
         responses{ki} = imfilter(I, kernels{ki}, 'replicate', 'conv');
     end
