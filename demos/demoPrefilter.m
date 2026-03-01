@@ -1,7 +1,7 @@
 % demoPrefilter.m
 %
 % Demo script: compare three pre-filtering strategies and their effect on
-% downstream rod enhancement (capsule DoC) and structure tensor coherence.
+% the two most powerful downstream rod enhancers.
 %
 %   imdiffusefilt     – Perona-Malik anisotropic diffusion (IPT built-in)
 %                       Isotropic edge-stopping: smooths within regions,
@@ -19,17 +19,18 @@
 % WHAT THE FIGURES SHOW
 %   For each image (synthetic, real) a 3×4 panel is produced:
 %     Row 1 – pre-filtered image under each method (visual quality)
-%     Row 2 – capsule DoC response applied to each pre-filtered image
-%     Row 3 – structure tensor coherence C from each pre-filtered image
+%     Row 2 – rodGranulometryEnhance response on each pre-filtered image
+%     Row 3 – fiberEnhance response on each pre-filtered image
 %
-%   A cleaner C map (fewer spurious high-C pixels in noise/background)
-%   indicates that the pre-filter improved orientation estimation.
-%   Brighter DoC responses on true rods with fewer false responses on
-%   puncta indicate better rod selectivity.
+%   A brighter response on true rods/fibres with less background and fewer
+%   false responses on puncta indicates the pre-filter improved detection.
+%   rodGranulometryEnhance (morphological, line SEs) and fiberEnhance
+%   (Hessian-based) are complementary: comparing both shows whether the
+%   improvement is consistent across detector types.
 %
 % PARAMETERS (tuned to width~8px, length 12-40px)
-%   imdiffusefilt:     NumberOfIterations=15, GradientThreshold=0.03, ConductionMethod='exponential'
-%   imguidedfilter:    NeighborhoodSize=7, DegreeOfSmoothing=5e-3
+%   imdiffusefilt:       NumberOfIterations=15, GradientThreshold=0.03, ConductionMethod='exponential'
+%   imguidedfilter:      NeighborhoodSize=7, DegreeOfSmoothing=5e-3
 %   orientedGaussSmooth: sigmaAlong=4, sigmaAcross=1.5, orientations=8
 
 clear; clc; close all;
@@ -69,24 +70,25 @@ pOGS.sigmaGrad    = 1.5;
 pOGS.sigmaInt     = 5;
 
 % =========================================================================
-% 3.  Downstream enhancer parameters (capsule DoC + structure tensor)
+% 3.  Downstream enhancer parameters (rodGranulometry + fiberEnhance)
 % =========================================================================
-pCapD.lengths      = [12 16 20 28 36 40];
-pCapD.width        = 8;
-pCapD.wideWidth    = 18;
-pCapD.alpha        = 0.55;
-pCapD.orientations = 12;
-pCapD.mode         = 'doc';
-pCapD.normalize    = true;
 
-pST.sigmaGrad  = 1.5;
-pST.sigmaInt   = 5;
-pST.normalize  = true;
+% --- rodGranulometryEnhance -----------------------------------------------
+pRodGran.lengths      = [8 12 16 20 28 36];
+pRodGran.orientations = 8;
+pRodGran.normalize    = true;
+
+% --- fiberEnhance ---------------------------------------------------------
+% fibermetric is available in IPT R2018b+; the try/catch below handles
+% older toolbox versions gracefully.
+pFib.widths    = [6 7 8 9 10];
+pFib.multimode = 'stack';
+pFib.normalize = true;
 
 % =========================================================================
 % 4.  Apply pre-filters and run downstream on BOTH images
 % =========================================================================
-% Storage: {raw, pm, guided, ogs} × {filtered_img, capDoc, coherence}
+% Storage: {raw, pm, guided, ogs} × {filtered_img, rodGran, fiberR}
 images = {Isynth, 'Synthetic'; Ireal, 'Real (mitImage)'};
 
 for im = 1:2
@@ -113,26 +115,33 @@ for im = 1:2
     fprintf('%.2fs\n', toc);
 
     filtered = {img, I_pm, I_gf, I_ogs};   % raw + 3 filtered
+    labels   = {'Raw', 'Perona-Malik', 'Guided', 'Oriented Gauss'};
 
     % ---- downstream enhancers on each filtered image -----------------------
-    capD    = cell(1, 4);
-    coher   = cell(1, 4);
-    labels  = {'Raw', 'Perona-Malik', 'Guided', 'Oriented Gauss'};
+    rodGranR = cell(1, 4);
+    fiberR   = cell(1, 4);
 
     for f = 1:4
         fi = filtered{f};
-        fprintf('  capsule DoC [%s]...', labels{f}); tic;
-        capD{f}  = capsuleEnhance(fi, pCapD);
+
+        fprintf('  rodGranulometry [%s]... ', labels{f}); tic;
+        rodGranR{f} = rodGranulometryEnhance(fi, pRodGran);
         fprintf('%.2fs\n', toc);
 
-        coher{f} = structureTensorEnhance(fi, pST);
+        fprintf('  fiberEnhance    [%s]... ', labels{f});
+        try
+            tic; fiberR{f} = fiberEnhance(fi, pFib); fprintf('%.2fs\n', toc);
+        catch ME
+            fprintf('SKIPPED (%s)\n', ME.message);
+            fiberR{f} = zeros(size(fi), 'single');
+        end
     end
 
     % =========================================================================
     % 5.  Figure (2 per image): 3 rows × 4 cols
     %     Row 1 – pre-filtered images
-    %     Row 2 – capsule DoC response
-    %     Row 3 – structure tensor coherence C
+    %     Row 2 – rodGranulometryEnhance response
+    %     Row 3 – fiberEnhance response
     % =========================================================================
     figNum = im;   % Fig 1 = synthetic, Fig 2 = real
     figure(figNum);
@@ -140,16 +149,16 @@ for im = 1:2
             'NumberTitle','off','Color','k', ...
             'Position', [30 + (im-1)*40, 30 + (im-1)*40, 1400, 900]);
 
-    rowLabel = {'Pre-filtered', 'Capsule DoC', 'Coherence C'};
+    rowLabel = {'Pre-filtered', 'Rod granulometry', 'Fiber enhance'};
     cmaps    = {{'gray','gray','gray','gray'}, ...
                 {'hot','hot','hot','hot'}, ...
-                {'parula','parula','parula','parula'}};
+                {'hot','hot','hot','hot'}};
 
     for row = 1:3
         switch row
             case 1, data = filtered;
-            case 2, data = capD;
-            case 3, data = coher;
+            case 2, data = rodGranR;
+            case 3, data = fiberR;
         end
 
         for col = 1:4
