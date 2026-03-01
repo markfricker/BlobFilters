@@ -40,6 +40,11 @@ addpath(fullfile(rootDir, 'demos'));
 fprintf('Running demoMitoEnhance...\n');
 demoMitoEnhance;
 
+% demoMitoEnhance calls 'clear' which wipes this script's workspace.
+% Recompute outDir and restore headless mode before saving figures.
+outDir = fullfile(fileparts(mfilename('fullpath')), 'figures');
+set(0, 'DefaultFigureVisible', 'off');
+
 saveFig(figure(1), outDir, 'fig01_synthetic_annotated.pdf');
 saveFig(figure(2), outDir, 'fig02_comparison_synth.pdf');
 saveFig(figure(3), outDir, 'fig03_comparison_real.pdf');
@@ -52,6 +57,10 @@ close all;
 % =========================================================================
 fprintf('Running demoPrefilter...\n');
 demoPrefilter;
+
+% demoPrefilter also calls 'clear' — recompute outDir again.
+outDir = fullfile(fileparts(mfilename('fullpath')), 'figures');
+set(0, 'DefaultFigureVisible', 'off');
 
 saveFig(figure(1), outDir, 'fig06_prefilter_raw.pdf');
 saveFig(figure(2), outDir, 'fig07_prefilter_pm.pdf');
