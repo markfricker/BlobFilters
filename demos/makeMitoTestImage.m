@@ -192,8 +192,8 @@ canvas = imfilter(canvas, psf, 'replicate', 'conv');
 % -----------------------------------------------------------------------
 canvas   = min(canvas, 1);
 nPhotons = 120;
-counts   = single(poissrnd(double(canvas .* nPhotons)));
+counts   = single(poissrnd(double(canvas) .* nPhotons));
 canvas   = counts ./ nPhotons;
-canvas   = canvas + single(0.012 .* randn(sz, sz));
+canvas   = canvas + 0.012 .* single(randn(sz, sz));
 I        = single(min(max(canvas, 0), 1));
 end

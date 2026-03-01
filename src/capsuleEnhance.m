@@ -83,26 +83,32 @@ end
 if params.wideWidth <= params.width && strcmpi(params.mode,'doc')
     warning('capsuleEnhance: wideWidth <= width in doc mode — surround may be ineffective.');
 end
+if any(params.lengths <= 0) || params.width <= 0
+    error('capsuleEnhance: lengths and width must be positive.');
+end
 
 I = im2single(I);
 
 % -------------------------------------------------------------------------
-% pre-build kernel bank
+% pre-build kernel bank (linearised for parfor compatibility)
 % -------------------------------------------------------------------------
-oris     = linspace(0, 180, params.orientations + 1);
+oris      = linspace(0, 180, params.orientations + 1);
 oris(end) = [];
-nL       = numel(params.lengths);
-nO       = numel(oris);
-kernels  = cell(nL, nO);
+nL        = numel(params.lengths);
+nO        = numel(oris);
+nKernels  = nL * nO;
+kernels   = cell(1, nKernels);
 
+idx = 0;
 for ki = 1:nL
     for oi = 1:nO
+        idx = idx + 1;
         switch lower(params.mode)
             case 'single'
-                kernels{ki,oi} = makeCapsuleKernel( ...
+                kernels{idx} = makeCapsuleKernel( ...
                     params.lengths(ki), params.width, oris(oi));
             case 'doc'
-                kernels{ki,oi} = makeDoCapsuleKernel( ...
+                kernels{idx} = makeDoCapsuleKernel( ...
                     params.lengths(ki), params.width, params.wideWidth, ...
                     oris(oi), params.alpha);
         end
@@ -112,14 +118,17 @@ end
 % -------------------------------------------------------------------------
 % accumulate maximum response across scale/orientation bank
 % -------------------------------------------------------------------------
-Rmax = -inf(size(I), 'single');
-
-for ki = 1:nL
-    for oi = 1:nO
-        resp = imfilter(I, kernels{ki,oi}, 'replicate', 'conv');
-        Rmax = max(Rmax, resp);
+responses = cell(1, nKernels);
+if license('test', 'Distrib_Computing_Toolbox')
+    parfor ki = 1:nKernels
+        responses{ki} = imfilter(I, kernels{ki}, 'replicate', 'conv');
+    end
+else
+    for ki = 1:nKernels
+        responses{ki} = imfilter(I, kernels{ki}, 'replicate', 'conv');
     end
 end
+Rmax = max(cat(3, responses{:}), [], 3);
 
 % -------------------------------------------------------------------------
 % normalize
@@ -154,7 +163,7 @@ K = exp(-(yr .^ 2) ./ (2 * sigmaW ^ 2)) ...
   .* exp(-(xr .^ 2) ./ (2 * sigmaL ^ 2));
 
 K = K - mean(K(:));
-K = K / (sum(abs(K(:))) + eps);
+K = single(K / (sum(abs(K(:))) + eps));
 end
 
 % -------------------------------------------------------------------------
@@ -203,5 +212,5 @@ K_outer = exp(-(yr.^2) ./ (2*sigWw^2)) ...
 K = K_inner - alpha .* K_outer;
 
 K = K - mean(K(:));
-K = K / (sum(abs(K(:))) + eps);
+K = single(K / (sum(abs(K(:))) + eps));
 end

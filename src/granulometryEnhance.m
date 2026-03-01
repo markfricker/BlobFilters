@@ -50,8 +50,13 @@ I = im2single(I);
 [m, n] = size(I);
 
 % Sort radii so residues are computed between consecutive scales
-radii = sort(params.sigmas(:)', 'ascend');
+radii  = sort(params.sigmas(:)', 'ascend');
 nRadii = numel(radii);
+
+if any(radii < 1)
+    warning('granulometryEnhance:radiusTooSmall', ...
+        'Radii < 1 will be clamped to 1; consider larger sigmas or upsampling I first.');
+end
 
 if nRadii < 2
     warning('granulometryEnhance:tooFewScales', ...

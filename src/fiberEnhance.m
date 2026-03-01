@@ -35,7 +35,7 @@ function R = fiberEnhance(I, params)
 
 if nargin < 2, params = struct(); end
 if ~isfield(params, 'widths'),    params.widths    = [6 7 8 9 10];   end
-if ~isfield(params, 'multimode'), params.multimode = 'stack';   end
+if ~isfield(params, 'multimode'), params.multimode = 'builtin'; end
 if ~isfield(params, 'normalize'), params.normalize = true;        end
 
 % --- input checks -----------------------------------------------------------
@@ -58,12 +58,11 @@ switch lower(params.multimode)
     case 'stack'
         % Explicit per-width stack, mirroring logEnhance — useful if you
         % want to inspect individual scale responses or weight them.
-        rStack = zeros([size(I,1), size(I,2), numel(params.widths)],'single');
+        R = zeros(size(I), 'single');
         for k = 1:numel(params.widths)
-            rStack(:,:,k) = single(fibermetric(I, params.widths(k), ...
-                                        'ObjectPolarity', 'bright'));
+            R = max(R, single(fibermetric(I, params.widths(k), ...
+                                   'ObjectPolarity', 'bright')));
         end
-        R = max(rStack, [], 3);
 
     otherwise
         error('fiberEnhance: unknown multimode ''%s''', params.multimode);
