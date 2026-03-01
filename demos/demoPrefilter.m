@@ -3,30 +3,29 @@
 % Demo script: compare three pre-filtering strategies and their effect on
 % the two most powerful downstream rod enhancers.
 %
-%   imdiffusefilt     – Perona-Malik anisotropic diffusion (IPT built-in)
-%                       Isotropic edge-stopping: smooths within regions,
-%                       stops at intensity edges.  Not directionally steered.
+%   imdiffusefilt       – Perona-Malik anisotropic diffusion (IPT built-in)
+%                         Isotropic edge-stopping: smooths within regions,
+%                         stops at intensity edges.  Not directionally steered.
 %
-%   imguidedfilter    – Guided filter (IPT built-in, R2014a+)
-%                       Intensity-similarity gated edge-preserving smoothing.
-%                       Fast (linear complexity); not directionally steered.
+%   imguidedfilter      – Guided filter (IPT built-in, R2014a+)
+%                         Intensity-similarity gated edge-preserving smoothing.
+%                         Fast (linear complexity); not directionally steered.
 %
 %   orientedGaussSmooth – Orientation-adaptive Gaussian smoothing (this toolbox)
-%                       Steers the smoothing kernel along the local fibre
-%                       direction using the structure tensor.  One-pass
-%                       non-iterative approximation to CED.
+%                         Steers the smoothing kernel along the local fibre
+%                         direction using the structure tensor.  One-pass
+%                         non-iterative approximation to CED.
 %
 % WHAT THE FIGURES SHOW
-%   For each image (synthetic, real) a 3×4 panel is produced:
-%     Row 1 – pre-filtered image under each method (visual quality)
-%     Row 2 – rodGranulometryEnhance response on each pre-filtered image
-%     Row 3 – fiberEnhance response on each pre-filtered image
+%   One figure per pre-filter method (4 total, including Raw baseline), each
+%   a 2×3 panel:
+%     Rows – Synthetic image (top) / Real image (bottom)
+%     Cols – Pre-filtered image | rodGranulometryEnhance | fiberEnhance
 %
-%   A brighter response on true rods/fibres with less background and fewer
-%   false responses on puncta indicates the pre-filter improved detection.
-%   rodGranulometryEnhance (morphological, line SEs) and fiberEnhance
-%   (Hessian-based) are complementary: comparing both shows whether the
-%   improvement is consistent across detector types.
+%   Comparing across figures shows how much each pre-filter improves
+%   detection; rodGranulometryEnhance (morphological) and fiberEnhance
+%   (Hessian-based) are complementary detectors so consistent improvement
+%   in both columns is a stronger indicator.
 %
 % PARAMETERS (tuned to width~8px, length 12-40px)
 %   imdiffusefilt:       NumberOfIterations=15, GradientThreshold=0.03, ConductionMethod='exponential'
@@ -45,32 +44,29 @@ fprintf('Loading real image...\n');
 realData = load('mitImage.mat');
 Ireal    = im2single(realData.I);
 
+images   = {Isynth, 'Synthetic'; Ireal, 'Real (mitImage)'};
+
 % =========================================================================
 % 2.  Pre-filter parameters
 % =========================================================================
 
 % --- Perona-Malik anisotropic diffusion -----------------------------------
-% GradientThreshold: gradients above this value stop diffusion.
-% For [0,1] single images, mitochondria boundary gradients ~0.02-0.1;
-% 0.03 preserves boundaries while smoothing noise.
-pmIter  = 15;
-pmGrad  = 0.03;
+pmIter = 15;
+pmGrad = 0.03;
 
 % --- Guided filter --------------------------------------------------------
-% NeighborhoodSize: local window (px); should be ~half the structure width.
-% DegreeOfSmoothing: ε² regularisation; smaller = more edge-preserving.
-gfNbhd  = 7;
-gfEps   = 5e-3;
+gfNbhd = 7;
+gfEps  = 5e-3;
 
 % --- Orientation-adaptive Gaussian smoothing ------------------------------
-pOGS.sigmaAlong   = 4;     % smooth 4 px along fibres
-pOGS.sigmaAcross  = 1.5;   % smooth 1.5 px across fibres (preserve edges)
+pOGS.sigmaAlong   = 4;
+pOGS.sigmaAcross  = 1.5;
 pOGS.orientations = 8;
 pOGS.sigmaGrad    = 1.5;
 pOGS.sigmaInt     = 5;
 
 % =========================================================================
-% 3.  Downstream enhancer parameters (rodGranulometry + fiberEnhance)
+% 3.  Downstream enhancer parameters
 % =========================================================================
 
 % --- rodGranulometryEnhance -----------------------------------------------
@@ -78,104 +74,111 @@ pRodGran.lengths      = [8 12 16 20 28 36];
 pRodGran.orientations = 8;
 pRodGran.normalize    = true;
 
-% --- fiberEnhance ---------------------------------------------------------
-% fibermetric is available in IPT R2018b+; the try/catch below handles
-% older toolbox versions gracefully.
+% --- fiberEnhance (IPT R2018b+) ------------------------------------------
 pFib.widths    = [6 7 8 9 10];
 pFib.multimode = 'stack';
 pFib.normalize = true;
 
 % =========================================================================
-% 4.  Apply pre-filters and run downstream on BOTH images
+% 4.  Pre-filter all images
+%     filtered{im, method}  im=1 synthetic, im=2 real
+%                           method=1 raw, 2 PM, 3 guided, 4 OGS
 % =========================================================================
-% Storage: {raw, pm, guided, ogs} × {filtered_img, rodGran, fiberR}
-images = {Isynth, 'Synthetic'; Ireal, 'Real (mitImage)'};
+methodNames = {'Raw (no pre-filter)', 'Perona-Malik', 'Guided', 'Oriented Gauss'};
+nMethods    = numel(methodNames);
+
+filtered = cell(2, nMethods);
 
 for im = 1:2
     img = images{im,1};
     lbl = images{im,2};
-    fprintf('\n--- %s ---\n', lbl);
+    fprintf('\n--- Pre-filtering: %s ---\n', lbl);
 
-    % ---- pre-filters -------------------------------------------------------
+    filtered{im,1} = img;   % raw baseline
+
     fprintf('  imdiffusefilt...      '); tic;
-    I_pm  = imdiffusefilt(img, ...
-                'NumberOfIterations', pmIter, ...
-                'GradientThreshold',  pmGrad, ...
-                'ConductionMethod',   'exponential');
+    filtered{im,2} = imdiffusefilt(img, ...
+        'NumberOfIterations', pmIter, ...
+        'GradientThreshold',  pmGrad, ...
+        'ConductionMethod',   'exponential');
     fprintf('%.2fs\n', toc);
 
     fprintf('  imguidedfilter...     '); tic;
-    I_gf  = imguidedfilter(img, img, ...
-                'NeighborhoodSize',   gfNbhd, ...
-                'DegreeOfSmoothing',  gfEps);
+    filtered{im,3} = imguidedfilter(img, img, ...
+        'NeighborhoodSize',  gfNbhd, ...
+        'DegreeOfSmoothing', gfEps);
     fprintf('%.2fs\n', toc);
 
     fprintf('  orientedGaussSmooth.. '); tic;
-    I_ogs = orientedGaussSmooth(img, pOGS);
+    filtered{im,4} = orientedGaussSmooth(img, pOGS);
     fprintf('%.2fs\n', toc);
-
-    filtered = {img, I_pm, I_gf, I_ogs};   % raw + 3 filtered
-    labels   = {'Raw', 'Perona-Malik', 'Guided', 'Oriented Gauss'};
-
-    % ---- downstream enhancers on each filtered image -----------------------
-    rodGranR = cell(1, 4);
-    fiberR   = cell(1, 4);
-
-    for f = 1:4
-        fi = filtered{f};
-
-        fprintf('  rodGranulometry [%s]... ', labels{f}); tic;
-        rodGranR{f} = rodGranulometryEnhance(fi, pRodGran);
-        fprintf('%.2fs\n', toc);
-
-        fprintf('  fiberEnhance    [%s]... ', labels{f});
-        try
-            tic; fiberR{f} = fiberEnhance(fi, pFib); fprintf('%.2fs\n', toc);
-        catch ME
-            fprintf('SKIPPED (%s)\n', ME.message);
-            fiberR{f} = zeros(size(fi), 'single');
-        end
-    end
-
-    % =========================================================================
-    % 5.  Figure (2 per image): 3 rows × 4 cols
-    %     Row 1 – pre-filtered images
-    %     Row 2 – rodGranulometryEnhance response
-    %     Row 3 – fiberEnhance response
-    % =========================================================================
-    figNum = im;   % Fig 1 = synthetic, Fig 2 = real
-    figure(figNum);
-    set(gcf,'Name', sprintf('Pre-filter comparison — %s', lbl), ...
-            'NumberTitle','off','Color','k', ...
-            'Position', [30 + (im-1)*40, 30 + (im-1)*40, 1400, 900]);
-
-    rowLabel = {'Pre-filtered', 'Rod granulometry', 'Fiber enhance'};
-    cmaps    = {{'gray','gray','gray','gray'}, ...
-                {'hot','hot','hot','hot'}, ...
-                {'hot','hot','hot','hot'}};
-
-    for row = 1:3
-        switch row
-            case 1, data = filtered;
-            case 2, data = rodGranR;
-            case 3, data = fiberR;
-        end
-
-        for col = 1:4
-            ax = subplot(3, 4, (row-1)*4 + col);
-            imshow(data{col}, []); colormap(ax, cmaps{row}{col});
-            if row == 1
-                title(labels{col}, 'Color','w','FontSize',10,'FontWeight','bold');
-            end
-            if col == 1
-                ylabel(rowLabel{row}, 'Color','w','FontSize',9);
-            end
-            set(ax,'XColor','none','YColor','none');
-        end
-    end
-
-    sgtitle(sprintf('Pre-filter comparison — %s image', lbl), ...
-            'Color','w','FontSize',13,'FontWeight','bold');
 end
 
-fprintf('\nDone. Two figures generated.\n');
+% =========================================================================
+% 5.  Run downstream enhancers on all filtered images
+%     rodGranR{im, method}, fiberR{im, method}
+% =========================================================================
+rodGranR = cell(2, nMethods);
+fiberR   = cell(2, nMethods);
+
+for im = 1:2
+    lbl = images{im,2};
+    fprintf('\n--- Downstream enhancers: %s ---\n', lbl);
+
+    for f = 1:nMethods
+        fi = filtered{im,f};
+
+        fprintf('  rodGranulometry [%-14s]  ', methodNames{f}); tic;
+        rodGranR{im,f} = rodGranulometryEnhance(fi, pRodGran);
+        fprintf('%.2fs\n', toc);
+
+        fprintf('  fiberEnhance    [%-14s]  ', methodNames{f});
+        try
+            tic; fiberR{im,f} = fiberEnhance(fi, pFib); fprintf('%.2fs\n', toc);
+        catch ME
+            fprintf('SKIPPED (%s)\n', ME.message);
+            fiberR{im,f} = zeros(size(fi), 'single');
+        end
+    end
+end
+
+% =========================================================================
+% 6.  Figures — one per pre-filter method
+%     Layout: 2 rows (Synthetic top, Real bottom) × 3 cols
+%             Col 1: pre-filtered image (gray)
+%             Col 2: rodGranulometryEnhance  (hot)
+%             Col 3: fiberEnhance            (hot)
+% =========================================================================
+colTitles = {'Pre-filtered', 'Rod granulometry', 'Fiber enhance'};
+rowLabels = {images{1,2}, images{2,2}};
+
+for f = 1:nMethods
+    figure(f);
+    set(gcf, 'Name', methodNames{f}, 'NumberTitle','off', ...
+             'Color','k', 'Position', [30 + (f-1)*30, 30 + (f-1)*30, 1100, 740]);
+
+    for im = 1:2
+        panelData = {filtered{im,f}, rodGranR{im,f}, fiberR{im,f}};
+        cmaps     = {'gray', 'hot', 'hot'};
+
+        for col = 1:3
+            ax = subplot(2, 3, (im-1)*3 + col);
+            imshow(panelData{col}, []); colormap(ax, cmaps{col});
+
+            % Column titles on top row only
+            if im == 1
+                title(colTitles{col}, 'Color','w', 'FontSize',10);
+            end
+            % Row labels on left column only
+            if col == 1
+                ylabel(rowLabels{im}, 'Color','w', 'FontSize',10);
+            end
+            set(ax, 'XColor','none', 'YColor','none');
+        end
+    end
+
+    sgtitle(sprintf('Pre-filter: %s', methodNames{f}), ...
+            'Color','w', 'FontSize',13, 'FontWeight','bold');
+end
+
+fprintf('\nDone. %d figures generated (one per method).\n', nMethods);
