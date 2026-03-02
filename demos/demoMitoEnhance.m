@@ -100,7 +100,7 @@ pCP.diameter = 10;
 images    = {Isynth, 'Synthetic'; Ireal, 'Real (mitImage)'};
 results   = cell(2, 8);   % {logR, fibR, capSR, capDR, granR, rodGranR, coherR, cpR}
 cpLabels  = cell(1, 2);   % uint16 label images from cellposeEnhance
-hasCellpose = exist('cellpose', 'file') == 2;
+hasCellpose = exist('cellpose', 'file') ~= 0;
 
 for im = 1:2
     img = images{im,1};
