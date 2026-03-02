@@ -1,6 +1,6 @@
 % demoMitoEnhance.m
 %
-% Demo script: synthetic + real confocal mitochondria images → six enhancers
+% Demo script: synthetic + real confocal mitochondria images → seven enhancers
 %
 %   logEnhance              – isotropic LoG bank (blob / puncta detection)
 %   fiberEnhance            – fibermetric-based tubular enhancer (IPT R2018b+)
@@ -10,6 +10,8 @@
 %   structureTensorEnhance  – local coherence index C ∈ [0,1]; applied as
 %                             a multiplicative weight after other enhancers
 %                             to separate rods (C→1) from puncta (C→0)
+%   cellposeEnhance         – deep-learning segmentation via Cellpose
+%                             (requires Medical Imaging Toolbox Cellpose add-on)
 %
 % All enhancer functions and makeMitoTestImage.m must be on the MATLAB path.
 % The real image is loaded from mitImage.mat (variable I, uint16).
@@ -85,11 +87,20 @@ pST.sigmaGrad  = 1.5;
 pST.sigmaInt   = 5;
 pST.normalize  = true;
 
+% --- cellposeEnhance -------------------------------------------------------
+% cyto3: Cellpose 3 generalist cytoplasm model (Nature Methods 2025).
+% diameter: expected object cross-section in pixels (~8 px wide mito → 10).
+% Requires Medical Imaging Toolbox Interface for Cellpose Library add-on.
+pCP.model    = 'cyto3';
+pCP.diameter = 10;
+
 % =========================================================================
 % 3.  Run enhancers on BOTH images
 % =========================================================================
-images  = {Isynth, 'Synthetic'; Ireal, 'Real (mitImage)'};
-results = cell(2, 7);   % {logR, fibR, capSR, capDR, granR, rodGranR, coherR} per image
+images    = {Isynth, 'Synthetic'; Ireal, 'Real (mitImage)'};
+results   = cell(2, 8);   % {logR, fibR, capSR, capDR, granR, rodGranR, coherR, cpR}
+cpLabels  = cell(1, 2);   % uint16 label images from cellposeEnhance
+hasCellpose = exist('cellpose', 'file') == 2;
 
 for im = 1:2
     img = images{im,1};
@@ -127,6 +138,24 @@ for im = 1:2
     fprintf('  structureTensor...    '); tic;
     results{im,7} = structureTensorEnhance(img, pST);
     fprintf('%.2fs\n', toc);
+
+    fprintf('  cellposeEnhance...    ');
+    if hasCellpose
+        try
+            tic;
+            [results{im,8}, cpLabels{im}] = cellposeEnhance(img, pCP);
+            fprintf('%.2fs\n', toc);
+        catch ME
+            fprintf('SKIPPED (%s)\n', ME.message);
+            results{im,8} = zeros(size(img), 'single');
+            cpLabels{im}  = zeros(size(img), 'uint16');
+            if im == 1, hasCellpose = false; end
+        end
+    else
+        fprintf('SKIPPED (Cellpose add-on not installed)\n');
+        results{im,8} = zeros(size(img), 'single');
+        cpLabels{im}  = zeros(size(img), 'uint16');
+    end
 end
 
 % =========================================================================
@@ -432,4 +461,49 @@ set(ax21,'XColor','none','YColor','none');
 sgtitle('Rod vs Disk Granulometry — Line openings suppress compact puncta', ...
         'Color','w','FontSize',13,'FontWeight','bold');
 
-fprintf('\nDone. Eight figures generated.\n');
+% =========================================================================
+% 12. Figure 9 — Cellpose deep-learning segmentation (conditional)
+%
+%     Cellpose cyto3 model applied to both images.  Three columns per row:
+%       Raw image | Binary detection mask | Coloured instance labels
+%
+%     Instance labels distinguish touching or overlapping objects that
+%     binary thresholding of enhancement maps cannot separate.
+%     This figure is only generated when the Cellpose add-on is available.
+% =========================================================================
+if hasCellpose
+    figure(9);
+    set(gcf,'Name','Cellpose Segmentation','NumberTitle','off', ...
+            'Color','k','Position',[240 240 1250 840]);
+
+    rowLabels = {'Synthetic', 'Real'};
+    rawImages = {Isynth, Ireal};
+    for im = 1:2
+        base = (im-1)*3;
+
+        ax = subplot(2,3, base+1);
+        imshow(rawImages{im},[]); colormap(ax,'gray');
+        title(sprintf('Raw (%s)', rowLabels{im}),'Color','w','FontSize',10);
+        set(ax,'XColor','none','YColor','none');
+
+        ax = subplot(2,3, base+2);
+        imshow(results{im,8},[]); colormap(ax,'hot');
+        title('Cellpose binary mask','Color','w','FontSize',10);
+        set(ax,'XColor','none','YColor','none');
+
+        ax = subplot(2,3, base+3);
+        if max(cpLabels{im}(:)) > 0
+            imshow(label2rgb(cpLabels{im}, 'hsv', 'k'));
+        else
+            imshow(zeros(size(cpLabels{im},1), size(cpLabels{im},2), 3));
+        end
+        title(sprintf('Instance labels  (n=%d)', max(cpLabels{im}(:))), ...
+              'Color','w','FontSize',10);
+        set(ax,'XColor','none','YColor','none');
+    end
+    sgtitle(sprintf('Cellpose %s — Deep-learning segmentation', pCP.model), ...
+            'Color','w','FontSize',13,'FontWeight','bold');
+end
+
+nFigs = 8 + hasCellpose;
+fprintf('\nDone. %d figures generated.\n', nFigs);

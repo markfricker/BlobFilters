@@ -383,6 +383,61 @@ pRod.orientations = 8;
 R = rodGranulometryEnhance(I, pRod);
 \end{lstlisting}
 
+% -----------------------------------------------------------------------------
+\section{\texttt{cellposeEnhance}}
+\label{sec:cellpose}
+
+\newthought{cellposeEnhance} wraps the MathWorks Medical Imaging Toolbox
+Interface for Cellpose Library~\cite{Stringer2021,Stringer2025}, providing
+deep-learning cell segmentation from within MATLAB.
+
+Unlike the other BlobFilters enhancers, which return continuous probability-like
+maps, \texttt{cellposeEnhance} returns a \emph{binary} mask and an integer label
+image:
+
+\begin{description}
+  \item[\texttt{R}] Binary single $\{0,1\}$ mask compatible with the $[0,1]$
+    convention of every other enhancer.  Can be used as a multiplicative weight,
+    a seed mask, or a segmentation result directly.
+  \item[\texttt{L}] \texttt{uint16} label image.  Each detected object carries
+    a unique positive integer; background is~0.  Neighbouring or touching objects
+    that would merge under simple thresholding are distinguished here.
+\end{description}
+
+\begin{lstlisting}
+[R, L] = cellposeEnhance(I);           % defaults: cyto3, diameter 10 px
+imshow(label2rgb(L, 'hsv', 'k'))       % coloured instance map
+\end{lstlisting}
+
+\subsection*{Parameters}
+\marginnote{%
+  \textbf{\texttt{model}} \newline
+  Cellpose model name or path to a custom model file.
+  Default \texttt{'cyto3'}.
+  \medskip\par
+  \textbf{\texttt{diameter}} \newline
+  Expected object cross-section (px). Default \texttt{10}.\newline
+  Set to \texttt{0} for automatic estimation (slower).
+  \medskip\par
+  Requires the \emph{Medical Imaging Toolbox Interface for Cellpose Library}
+  add-on and a Python environment with \texttt{cellpose} installed.
+}
+
+\subsection*{Model choice for mitochondria}
+
+The \texttt{'cyto3'} model (Cellpose~3, Nature Methods 2025) is a suitable
+default for fluorescence mitochondria images: it was trained on nine
+heterogeneous datasets and generalises well to sub-cellular structures.  For
+higher specificity, fine-tune a custom model with 100--200 manually annotated
+frames using the Cellpose~2.0 human-in-the-loop GUI, then supply the saved
+model path:
+
+\begin{lstlisting}
+pCP.model    = 'C:\models\mito_finetuned';
+pCP.diameter = 10;
+[R, L] = cellposeEnhance(I, pCP);
+\end{lstlisting}
+
 % =============================================================================
 \chapter{Orientation Analysis and Pre-filtering}
 \label{ch:orientation}
@@ -607,6 +662,38 @@ pre-filtered image, rod granulometry, fiberEnhance).
   \label{fig:pf_ogs}
 \end{figure*}
 
+% -------------------------------------------------------------------------
+\section{\texttt{demoMitoEnhance} --- Cellpose comparison}
+
+When the Cellpose add-on is installed, \texttt{demoMitoEnhance} produces a
+ninth figure comparing the \texttt{cyto3} segmentation with the raw image.
+Three columns are shown per image row:
+
+\begin{description}
+  \item[Raw] Original grayscale image (grey colourmap).
+  \item[Binary mask] The $\{0,1\}$ output \texttt{R} from
+    \texttt{cellposeEnhance} (\textit{hot} colourmap).
+  \item[Instance labels] The \texttt{uint16} label image \texttt{L} rendered
+    with \texttt{label2rgb}: each object receives a distinct hue, making
+    touching objects visually distinguishable.
+\end{description}
+
+\IfFileExists{figures/fig10_cellpose.pdf}{%
+\begin{figure*}
+  \includegraphics[width=\linewidth]{figures/fig10_cellpose.pdf}
+  \caption{Cellpose \texttt{cyto3} segmentation (\texttt{diameter}=10\,px).
+    Left: raw image.  Centre: binary detection mask \texttt{R}.
+    Right: coloured instance labels \texttt{L} --- touching objects are
+    assigned distinct hues.}
+  \label{fig:cellpose}
+\end{figure*}
+}{%
+\begin{quote}
+  \textit{Figure not available: run \texttt{docs/exportFigures.m} with the
+  Cellpose add-on installed to generate \texttt{fig10\_cellpose.pdf}.}
+\end{quote}
+}
+
 % =============================================================================
 \chapter{Unit Tests}
 \label{ch:tests}
@@ -638,6 +725,24 @@ The 49 tests cover four categories for each function:
 \addcontentsline{toc}{chapter}{References}
 
 \begin{thebibliography}{99}
+
+\bibitem{Stringer2021}
+Stringer~C., Wang~T., Michaelos~M. \& Pachitariu~M. (2021)
+Cellpose: a generalist algorithm for cellular segmentation.
+\textit{Nature Methods} \textbf{18}:100--106.
+\url{https://doi.org/10.1038/s41592-020-01018-x}
+
+\bibitem{Pachitariu2022}
+Pachitariu~M. \& Stringer~C. (2022)
+Cellpose 2.0: how to train your own model.
+\textit{Nature Methods} \textbf{19}:1634--1641.
+\url{https://doi.org/10.1038/s41592-022-01663-4}
+
+\bibitem{Stringer2025}
+Stringer~C. \& Pachitariu~M. (2025)
+Cellpose3: one-click image restoration for improved cellular segmentation.
+\textit{Nature Methods} \textbf{22}:592--599.
+\url{https://doi.org/10.1038/s41592-025-02595-5}
 
 \bibitem{Bigun1987}
 Bigun~J. \& Granlund~G.H. (1987)

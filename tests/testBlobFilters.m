@@ -398,4 +398,72 @@ classdef testBlobFilters < matlab.unittest.TestCase
 
     end
 
+    % =====================================================================
+    %  cellposeEnhance
+    %
+    %  Tests that require Cellpose use tc.assumeTrue to mark themselves as
+    %  Incomplete (not Failed) when the add-on is absent, consistent with
+    %  how fiberEnhance tests handle a missing Image Processing Toolbox.
+    % =====================================================================
+    methods (Test)
+
+        function testCP_smoke(tc)
+            tc.assumeTrue(exist('cellpose','file') == 2, ...
+                'Cellpose add-on not installed — test skipped');
+            [R, L] = cellposeEnhance(testBlobFilters.blobImage());
+            tc.verifyNotEmpty(R);
+            tc.verifyNotEmpty(L);
+        end
+
+        function testCP_outputSize(tc)
+            tc.assumeTrue(exist('cellpose','file') == 2, ...
+                'Cellpose add-on not installed — test skipped');
+            I = testBlobFilters.blobImage();
+            [R, L] = cellposeEnhance(I);
+            tc.verifySize(R, size(I));
+            tc.verifySize(L, size(I));
+        end
+
+        function testCP_outputClass(tc)
+            tc.assumeTrue(exist('cellpose','file') == 2, ...
+                'Cellpose add-on not installed — test skipped');
+            [R, L] = cellposeEnhance(testBlobFilters.blobImage());
+            tc.verifyClass(R, 'single');
+            tc.verifyClass(L, 'uint16');
+        end
+
+        function testCP_binaryRange(tc)
+            % R must be binary: all values exactly 0 or 1
+            tc.assumeTrue(exist('cellpose','file') == 2, ...
+                'Cellpose add-on not installed — test skipped');
+            R = cellposeEnhance(testBlobFilters.blobImage());
+            tc.verifyGreaterThanOrEqual(min(R(:)), single(0));
+            tc.verifyLessThanOrEqual(   max(R(:)), single(1));
+            uniqueVals = unique(R(:));
+            tc.verifyTrue(all(uniqueVals == 0 | uniqueVals == 1));
+        end
+
+        function testCP_uniformImage_givesZero(tc)
+            % A flat uniform image has no cell-like structure; Cellpose
+            % should detect no objects and return an all-zero binary mask.
+            tc.assumeTrue(exist('cellpose','file') == 2, ...
+                'Cellpose add-on not installed — test skipped');
+            R = cellposeEnhance(testBlobFilters.uniformImage());
+            tc.verifyEqual(max(R(:)), single(0));
+        end
+
+        function testCP_toolboxMissing_errors(tc)
+            % Verify that the function raises a specific, informative error
+            % when the Cellpose add-on is not installed.
+            % This test is only meaningful when the add-on IS absent;
+            % skip it (Incomplete) when Cellpose is installed.
+            tc.assumeFalse(exist('cellpose','file') == 2, ...
+                'Cellpose IS installed — missing-toolbox test not applicable');
+            tc.verifyError( ...
+                @() cellposeEnhance(testBlobFilters.blobImage()), ...
+                'cellposeEnhance:notFound');
+        end
+
+    end
+
 end

@@ -19,6 +19,9 @@
 %   fig07_prefilter_pm.pdf          – Perona-Malik (demoPrefilter Fig 2)
 %   fig08_prefilter_guided.pdf      – guided filter (demoPrefilter Fig 3)
 %   fig09_prefilter_ogs.pdf         – oriented Gauss (demoPrefilter Fig 4)
+%   fig10_cellpose.pdf              – Cellpose segmentation (demoMitoEnhance Fig 9)
+%                                     OPTIONAL: only written when the Cellpose
+%                                     add-on is installed and Fig 9 was created.
 %
 % NOTE
 %   Figures are exported at 300 DPI using exportgraphics (R2020a+).
@@ -35,7 +38,7 @@ addpath(fullfile(rootDir, 'src'));
 addpath(fullfile(rootDir, 'demos'));
 
 % =========================================================================
-% 1.  Run demoMitoEnhance (generates Figures 1-8)
+% 1.  Run demoMitoEnhance (generates Figures 1-8, plus optional Fig 9)
 % =========================================================================
 fprintf('Running demoMitoEnhance...\n');
 demoMitoEnhance;
@@ -50,6 +53,11 @@ saveFig(figure(2), outDir, 'fig02_comparison_synth.pdf');
 saveFig(figure(3), outDir, 'fig03_comparison_real.pdf');
 saveFig(figure(7), outDir, 'fig04_coherence_separation.pdf');
 saveFig(figure(8), outDir, 'fig05_rod_vs_disk.pdf');
+
+% Figure 9 (Cellpose) is optional — only created when the add-on is installed.
+if ishandle(9)
+    saveFig(figure(9), outDir, 'fig10_cellpose.pdf');
+end
 close all;
 
 % =========================================================================
