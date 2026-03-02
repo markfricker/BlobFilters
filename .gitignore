@@ -38,3 +38,15 @@ codegen/
 # SimBiology backup files
 *.sbproj.backup
 *.sbproj.bak
+
+# LaTeX build artifacts
+docs/*.aux
+docs/*.bbl
+docs/*.blg
+docs/*.log
+docs/*.out
+docs/*.synctex.gz
+docs/*.toc
+
+# Claude Code worktree metadata
+src/.claude/

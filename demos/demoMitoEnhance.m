@@ -1,509 +1,262 @@
+%% 
 % demoMitoEnhance.m
 %
-% Demo script: synthetic + real confocal mitochondria images → seven enhancers
+% Demo script: classical enhancers (OGS-smoothed + coherence-weighted)
+%              versus Cellpose deep-learning segmentation
 %
-%   logEnhance              – isotropic LoG bank (blob / puncta detection)
-%   fiberEnhance            – fibermetric-based tubular enhancer (IPT R2018b+)
-%   capsuleEnhance          – oriented capsule bank, single and DoC modes
-%   granulometryEnhance     – disk-based pattern spectrum (isotropic scale integration)
-%   rodGranulometryEnhance  – oriented linear pattern spectrum (rod/fibre selective)
-%   structureTensorEnhance  – local coherence index C ∈ [0,1]; applied as
-%                             a multiplicative weight after other enhancers
-%                             to separate rods (C→1) from puncta (C→0)
-%   cellposeEnhance         – deep-learning segmentation via Cellpose
-%                             (requires Medical Imaging Toolbox Cellpose add-on)
+% PIPELINE
+%   Preprocessing  : orientedGaussSmooth(Ireal)  → Ism
+%                    Smooths along the local fibre axis; suppresses noise
+%                    without blurring mitochondrial boundaries.
+%   Classical enhancers (run on Ism):
+%     logEnhance
+%     fiberEnhance
+%     capsuleEnhance  (DoC)
+%     rodGranulometryEnhance
+%   Deep-learning  : cellposeEnhance(Ireal)  → binary mask + label image
+%                    Run on the original image (Cellpose normalises internally).
 %
-% All enhancer functions and makeMitoTestImage.m must be on the MATLAB path.
-% The real image is loaded from mitImage.mat (variable I, uint16).
+% FIGURES PRODUCED (real image only; synthetic toggled OFF)
+%   Figure 1 — full field of view:
+%     Raw | log | fiber | capDoC | rodGran | CP mask | CP labels
+%   Figure 2 — zoom roi1 (cluster 1):  same seven columns
+%   Figure 3 — zoom roi2 (cluster 2):  same seven columns
 %
-% Assumed mitochondrial dimensions (pixels):
-%   width  : ~8 px
-%   length : 12-40 px
+% REQUIREMENTS
+%   All .m enhancer files + makeMitoTestImage.m on the MATLAB path
+%   mitImage.mat  (variable I, uint16 confocal mito image)
+%   For Cellpose: Medical Imaging Toolbox Interface for Cellpose Library add-on
+%                 + Python cellpose >= 3.x in the configured pyenv environment
 
 clear; clc; close all;
 
 % =========================================================================
-% 1.  Load / generate images
+% TOGGLE
 % =========================================================================
-fprintf('Generating synthetic test image...\n');
-Isynth = makeMitoTestImage(512, 42);
+showSynthetic = false;   % set true to re-enable synthetic-image figures
+
+% =========================================================================
+% ZOOM REGIONS  ← adjust after Figure 1 to frame the two main clusters
+%
+%   Format: [x_left, y_top, width, height]  (imcrop convention, 1-based px)
+%   Tip:    hover over Figure 1 with the data cursor to read pixel coords.
+% =========================================================================
+roi1 = [100  80  220 220];   % cluster 1  (adjust)
+roi2 = [330 220  220 220];   % cluster 2  (adjust)
+
+% =========================================================================
+% 1.  Load images
+% =========================================================================
+if showSynthetic
+    fprintf('Generating synthetic test image...\n');
+    Isynth = makeMitoTestImage(512, 42);
+end
 
 fprintf('Loading real image...\n');
 realData = load('mitImage.mat');
 Ireal    = im2single(realData.I);   % uint16 → single [0,1]
+[imgH, imgW] = size(Ireal);
+fprintf('  Image size: %d × %d px\n', imgW, imgH);
 
 % =========================================================================
-% 2.  Enhancer parameters  (tuned to width~8px, length 12-40px)
+% 2.  Parameters
 % =========================================================================
 
-% --- logEnhance -----------------------------------------------------------
-pLog.sigmas    = [2 3 4 5 6];      % sigma~4 → peak response at dia~8px
+% --- orientedGaussSmooth (preprocessing) ---------------------------------
+pOGS.sigmaAlong   = 4;    % along-fibre smoothing scale (px)
+pOGS.sigmaAcross  = 1.5;  % across-fibre smoothing scale (px)
+pOGS.orientations = 8;
+pOGS.sigmaGrad    = 1.5;
+pOGS.sigmaInt     = 5;
+
+% --- logEnhance ----------------------------------------------------------
+pLog.sigmas    = [2 3 4 5 6];
 pLog.normalize = true;
 
-% --- fiberEnhance ---------------------------------------------------------
-pFib.widths    = [6 7 8 9 10];     % centred on nominal 8px width
+% --- fiberEnhance --------------------------------------------------------
+pFib.widths    = [6 7 8 9 10];
 pFib.multimode = 'stack';
 pFib.normalize = true;
 
-% --- capsuleEnhance : single mode ----------------------------------------
-pCapS.lengths      = [12 16 20 28 36 40];
-pCapS.width        = 8;
-pCapS.orientations = 12;
-pCapS.mode         = 'single';
-pCapS.normalize    = true;
-
-% --- capsuleEnhance : DoC mode -------------------------------------------
+% --- capsuleEnhance DoC --------------------------------------------------
 pCapD.lengths      = [12 16 20 28 36 40];
 pCapD.width        = 8;
-pCapD.wideWidth    = 18;           % inhibitory surround ~2.25x nominal width
+pCapD.wideWidth    = 18;
 pCapD.alpha        = 0.55;
 pCapD.orientations = 12;
 pCapD.mode         = 'doc';
 pCapD.normalize    = true;
 
-% --- granulometryEnhance --------------------------------------------------
-% Radii are chosen to span the mitochondrial cross-section (half-width to
-% full-width) and capture both puncta (~4 px radius) and wider tubules.
-% The pattern spectrum differentiates between successive disk openings, so
-% radii should be roughly evenly spaced in the range of interest.
-% Upper bound (r=16) is set to suppress larger background structures.
-pGran.sigmas    = [2 4 6 8 10 12 16];   % disk radii in px; width~8px → peak at r=4-8
-pGran.normalize = true;
-
-% --- rodGranulometryEnhance -----------------------------------------------
-% Same length range as capsuleEnhance.  Line SEs inherently suppress compact
-% puncta (a round object cannot survive a line opening longer than its
-% diameter), so this enhancer is selective for elongated structures without
-% needing a coherence post-weight.
-pRodGran.lengths      = [8 12 16 20 28 36];  % line lengths in px
-pRodGran.orientations = 8;                    % angles in [0,180)
+% --- rodGranulometryEnhance ----------------------------------------------
+pRodGran.lengths      = [8 12 16 20 28 36];
+pRodGran.orientations = 8;
 pRodGran.normalize    = true;
 
-% --- structureTensorEnhance -----------------------------------------------
-% sigmaGrad: gradient smoothing scale — suppress pixel-level noise.
-% sigmaInt : integration scale — should match structure half-width (~4-5 px).
-% normalize: rescale C to [0,1] so it acts as a clean [0,1] weight.
-pST.sigmaGrad  = 1.5;
-pST.sigmaInt   = 5;
-pST.normalize  = true;
-
-% --- cellposeEnhance -------------------------------------------------------
-% cyto3: Cellpose 3 generalist cytoplasm model (Nature Methods 2025).
-% diameter: expected object cross-section in pixels (~8 px wide mito → 10).
-% Requires Medical Imaging Toolbox Interface for Cellpose Library add-on.
-pCP.model    = 'cyto3';
-pCP.diameter = 10;
+% --- cellposeEnhance -----------------------------------------------------
+% cyto3: Cellpose 3 super-generalist model (Nature Methods 2025).
+%   Requires Python cellpose >= 3.x; weights auto-downloaded on first call.
+% cellProb = -2: relaxed threshold to recover faint / elongated mitochondria
+%   (default 0; range -6 to 6 — lower = more detections, more noise below -4)
+% flowThreshold = 0.8: tolerate imperfect flow fields on elongated objects
+%   (default 0.4; range 0.1-3 — higher = more detections, rougher boundaries)
+pCP.model         = 'cyto3';
+pCP.diameter      = 10;
+pCP.cellProb      = -2;
+pCP.flowThreshold = 0.8;
 
 % =========================================================================
-% 3.  Run enhancers on BOTH images
+% 3.  Preprocessing: OGS smooth
 % =========================================================================
-images    = {Isynth, 'Synthetic'; Ireal, 'Real (mitImage)'};
-results   = cell(2, 8);   % {logR, fibR, capSR, capDR, granR, rodGranR, coherR, cpR}
-cpLabels  = cell(1, 2);   % uint16 label images from cellposeEnhance
+fprintf('\n--- Preprocessing ---\n');
+
+fprintf('  orientedGaussSmooth...    '); tic;
+Ism = orientedGaussSmooth(Ireal, pOGS);
+fprintf('%.2fs\n', toc);
+
+% =========================================================================
+% 4.  Classical enhancers on Ism
+% =========================================================================
+fprintf('\n--- Classical enhancers (on OGS-smoothed image) ---\n');
+
+fprintf('  logEnhance...             '); tic;
+logR  = logEnhance(Ism, pLog);
+fprintf('%.2fs\n', toc);
+
+fprintf('  fiberEnhance...           ');
+try
+    tic; fibR = fiberEnhance(Ism, pFib); fprintf('%.2fs\n', toc);
+catch ME
+    fprintf('SKIPPED (%s)\n', ME.message);
+    fibR = zeros(size(Ism), 'single');
+end
+
+fprintf('  capsule DoC...            '); tic;
+capDR = capsuleEnhance(Ism, pCapD);
+fprintf('%.2fs\n', toc);
+
+fprintf('  rodGranulometry...        '); tic;
+rodR  = rodGranulometryEnhance(Ism, pRodGran);
+fprintf('%.2fs\n', toc);
+
+% (enhancers already output normalised [0,1] maps via normalize=true)
+
+% =========================================================================
+% 5.  Cellpose on original image
+% =========================================================================
+fprintf('\n--- Cellpose ---\n');
+fprintf('  cellposeEnhance...        ');
 hasCellpose = exist('cellpose', 'file') ~= 0;
-
-for im = 1:2
-    img = images{im,1};
-    lbl = images{im,2};
-    fprintf('\n--- %s ---\n', lbl);
-
-    fprintf('  logEnhance...         '); tic;
-    results{im,1} = logEnhance(img, pLog);
-    fprintf('%.2fs\n', toc);
-
-    fprintf('  fiberEnhance...       ');
+if hasCellpose
     try
-        tic; results{im,2} = fiberEnhance(img, pFib); fprintf('%.2fs\n', toc);
+        tic;
+        [cpMask, cpL] = cellposeEnhance(Ireal, pCP);
+        fprintf('%.2fs  (%d objects)\n', toc, max(cpL(:)));
     catch ME
         fprintf('SKIPPED (%s)\n', ME.message);
-        results{im,2} = zeros(size(img), 'single');
+        cpMask      = zeros(size(Ireal), 'single');
+        cpL         = zeros(size(Ireal), 'uint16');
+        hasCellpose = false;
     end
+else
+    fprintf('SKIPPED (Cellpose add-on not installed)\n');
+    cpMask = zeros(size(Ireal), 'single');
+    cpL    = zeros(size(Ireal), 'uint16');
+end
 
-    fprintf('  capsule single...     '); tic;
-    results{im,3} = capsuleEnhance(img, pCapS);
-    fprintf('%.2fs\n', toc);
-
-    fprintf('  capsule DoC...        '); tic;
-    results{im,4} = capsuleEnhance(img, pCapD);
-    fprintf('%.2fs\n', toc);
-
-    fprintf('  granulometryEnhance.. '); tic;
-    results{im,5} = granulometryEnhance(img, pGran);
-    fprintf('%.2fs\n', toc);
-
-    fprintf('  rodGranulometry...    '); tic;
-    results{im,6} = rodGranulometryEnhance(img, pRodGran);
-    fprintf('%.2fs\n', toc);
-
-    fprintf('  structureTensor...    '); tic;
-    results{im,7} = structureTensorEnhance(img, pST);
-    fprintf('%.2fs\n', toc);
-
-    fprintf('  cellposeEnhance...    ');
-    if hasCellpose
-        try
-            tic;
-            [results{im,8}, cpLabels{im}] = cellposeEnhance(img, pCP);
-            fprintf('%.2fs\n', toc);
-        catch ME
-            fprintf('SKIPPED (%s)\n', ME.message);
-            results{im,8} = zeros(size(img), 'single');
-            cpLabels{im}  = zeros(size(img), 'uint16');
-            if im == 1, hasCellpose = false; end
-        end
-    else
-        fprintf('SKIPPED (Cellpose add-on not installed)\n');
-        results{im,8} = zeros(size(img), 'single');
-        cpLabels{im}  = zeros(size(img), 'uint16');
-    end
+% Coloured instance-label overlay (uint8 RGB)
+if hasCellpose && max(cpL(:)) > 0
+    cpRGB = label2rgb(cpL, 'hsv', 'k');
+else
+    cpRGB = zeros(imgH, imgW, 3, 'uint8');
 end
 
 % =========================================================================
-% 4.  Figure 1 — annotated synthetic test image
+% 6.  Panel layout (seven columns, constant across all three figures)
+% =========================================================================
+nLabel      = max(cpL(:));
+panelTitles = {'Raw', ...
+               'log', ...
+               'fiber', ...
+               'capDoC', ...
+               'rodGran', ...
+               sprintf('Cellpose mask  (n=%d)', nLabel), ...
+               sprintf('Cellpose labels  (n=%d)', nLabel)};
+cmaps = {'gray', 'hot', 'hot', 'hot', 'hot', 'hot', []};
+% [] = truecolor RGB for labels panel
+
+% =========================================================================
+% 7.  Figure 1 — Full FOV
 % =========================================================================
 figure(1);
-set(gcf,'Name','Synthetic Test Image','NumberTitle','off', ...
-        'Color','k','Position',[30 30 560 560]);
-imshow(Isynth, []);  colormap(gca,'gray');
-title('Synthetic Mitochondria Test Image','Color','w','FontSize',13);
-hold on;
-rSpec = {[10  10  230 230],'Isolated',  [0.4 0.8 0.4];
-         [175 175 175 175],'Clustered', [0.9 0.7 0.2];
-         [330  10  170 330],'Network A', [0.3 0.6 0.9];
-         [10  360  490 140],'Network B', [0.9 0.4 0.4]};
-for k = 1:size(rSpec,1)
-    b = rSpec{k,1};
-    rectangle('Position',b,'EdgeColor',rSpec{k,3},'LineWidth',1.5,'LineStyle','--');
-    text(b(1)+4, b(2)+14, rSpec{k,2}, 'Color',rSpec{k,3}, ...
-         'FontSize',9,'FontWeight','bold');
-end
-hold off;
+set(gcf, 'Name', 'Real Image — Full FOV', 'NumberTitle', 'off', ...
+         'Color', 'k', 'Position', [30 680 1820 380]);
+
+mitoFillFigure(1, ...
+    {Ireal, logR, fibR, capDR, rodR, cpMask, cpRGB}, ...
+    'Real Mitochondria — Classical (OGS-smoothed) vs Cellpose', ...
+    panelTitles, cmaps);
 
 % =========================================================================
-% 5.  Figure 2 — synthetic image comparison panel (now 6 panels, 2x3)
+% 8.  Figure 2 — Zoom: cluster 1
 % =========================================================================
-titles2 = {'Raw (synthetic)', ...
-           'logEnhance', ...
-           'fiberEnhance', ...
-           'capsule single', ...
-           'capsule DoC', ...
-           'granulometry'};
-panels2 = {Isynth, results{1,1}, results{1,2}, results{1,3}, results{1,4}, results{1,5}};
-
 figure(2);
-set(gcf,'Name','Synthetic — Enhancement Comparison','NumberTitle','off', ...
-        'Color','k','Position',[30 30 1250 840]);
-cmaps = {'gray','hot','hot','hot','hot','hot'};
-for k = 1:6
-    ax = subplot(2,3,k);
-    imshow(panels2{k},[]); colormap(ax, cmaps{k});
-    title(titles2{k},'Color','w','FontSize',10);
-    set(ax,'XColor','none','YColor','none');
-end
-sgtitle('Synthetic Image — Enhancement Comparison', ...
-        'Color','w','FontSize',13,'FontWeight','bold');
+set(gcf, 'Name', 'Real Image — Zoom cluster 1', 'NumberTitle', 'off', ...
+         'Color', 'k', 'Position', [30 340 1820 380]);
+
+mitoFillFigure(2, ...
+    {imcrop(Ireal, roi1), imcrop(logR, roi1), imcrop(fibR, roi1), ...
+     imcrop(capDR, roi1), imcrop(rodR, roi1), ...
+     imcrop(cpMask, roi1), imcrop(cpRGB, roi1)}, ...
+    sprintf('Cluster 1  [x=%d  y=%d  %d×%d px]', roi1(1), roi1(2), roi1(3), roi1(4)), ...
+    panelTitles, cmaps);
 
 % =========================================================================
-% 6.  Figure 3 — real image comparison panel (now 6 panels, 2x3)
+% 9.  Figure 3 — Zoom: cluster 2
 % =========================================================================
-titles3 = {'Raw (real)', ...
-           'logEnhance', ...
-           'fiberEnhance', ...
-           'capsule single', ...
-           'capsule DoC', ...
-           'granulometry'};
-panels3 = {Ireal, results{2,1}, results{2,2}, results{2,3}, results{2,4}, results{2,5}};
-
 figure(3);
-set(gcf,'Name','Real Image — Enhancement Comparison','NumberTitle','off', ...
-        'Color','k','Position',[60 60 1250 840]);
-for k = 1:6
-    ax = subplot(2,3,k);
-    imshow(panels3{k},[]); colormap(ax, cmaps{k});
-    title(titles3{k},'Color','w','FontSize',10);
-    set(ax,'XColor','none','YColor','none');
+set(gcf, 'Name', 'Real Image — Zoom cluster 2', 'NumberTitle', 'off', ...
+         'Color', 'k', 'Position', [30 0 1820 380]);
+
+mitoFillFigure(3, ...
+    {imcrop(Ireal, roi2), imcrop(logR, roi2), imcrop(fibR, roi2), ...
+     imcrop(capDR, roi2), imcrop(rodR, roi2), ...
+     imcrop(cpMask, roi2), imcrop(cpRGB, roi2)}, ...
+    sprintf('Cluster 2  [x=%d  y=%d  %d×%d px]', roi2(1), roi2(2), roi2(3), roi2(4)), ...
+    panelTitles, cmaps);
+
+% =========================================================================
+% 10. Synthetic figures (toggled off)
+% =========================================================================
+if showSynthetic
+    fprintf('\n[showSynthetic = true — no synthetic figures defined in this version]\n');
 end
-sgtitle('Real Image — Enhancement Comparison', ...
-        'Color','w','FontSize',13,'FontWeight','bold');
+
+fprintf('\nDone. 3 figures generated.\n');
+
 
 % =========================================================================
-% 7.  Figure 4 — DoC vs single difference map + cluster close-up (synthetic)
+% LOCAL FUNCTION — must be at the end of the script file (R2016b+)
 % =========================================================================
-diff_DS = results{1,4} - results{1,3};
-
-figure(4);
-set(gcf,'Name','DoC vs Single','NumberTitle','off', ...
-        'Color','k','Position',[90 90 1100 460]);
-
-% Build blue-white-red diverging colormap
-n   = 256;  t = linspace(0,1,n)';
-bwr = [t, t, ones(n,1); ones(n,1), flipud(t), flipud(t)];
-bwr = bwr(round(linspace(1,size(bwr,1),n)),:);
-
-ax1 = subplot(1,3,1);
-imshow(diff_DS,[-0.5 0.5]); colormap(ax1,bwr);
-cb = colorbar; cb.Color = 'w';
-title('DoC − Single (synthetic)','Color','w','FontSize',10);
-set(ax1,'XColor','none','YColor','none');
-
-roi = [180 180 160 160];
-ax2 = subplot(1,3,2);
-imshow(imcrop(results{1,3},roi),[]); colormap(ax2,'hot');
-title('Cluster close-up: single','Color','w','FontSize',10);
-set(ax2,'XColor','none','YColor','none');
-
-ax3 = subplot(1,3,3);
-imshow(imcrop(results{1,4},roi),[]); colormap(ax3,'hot');
-title('Cluster close-up: DoC','Color','w','FontSize',10);
-set(ax3,'XColor','none','YColor','none');
-
-sgtitle('DoC surround-suppression on clustered region', ...
-        'Color','w','FontSize',13,'FontWeight','bold');
-
-% =========================================================================
-% 8.  Figure 5 — DoC vs single on real image
-% =========================================================================
-figure(5);
-set(gcf,'Name','DoC vs Single — Real','NumberTitle','off', ...
-        'Color','k','Position',[120 120 900 420]);
-
-ax4 = subplot(1,2,1);
-imshow(results{2,3},[]); colormap(ax4,'hot');
-title('Real: capsule single','Color','w','FontSize',11);
-set(ax4,'XColor','none','YColor','none');
-
-ax5 = subplot(1,2,2);
-imshow(results{2,4},[]); colormap(ax5,'hot');
-title('Real: capsule DoC','Color','w','FontSize',11);
-set(ax5,'XColor','none','YColor','none');
-
-sgtitle('Real Image — Single vs DoC', ...
-        'Color','w','FontSize',13,'FontWeight','bold');
-
-% =========================================================================
-% 9.  Figure 6 — granulometry vs logEnhance comparison
-%     Both methods integrate responses across spatial scales; this figure
-%     shows where the morphological (granulometry) and Laplacian-of-Gaussian
-%     approaches agree and diverge on the same scene.
-% =========================================================================
-diff_gran_log_synth = results{1,5} - results{1,1};
-diff_gran_log_real  = results{2,5} - results{2,1};
-
-figure(6);
-set(gcf,'Name','Granulometry vs LoG','NumberTitle','off', ...
-        'Color','k','Position',[150 150 1250 840]);
-
-% Row 1: synthetic
-ax6 = subplot(2,4,1);
-imshow(Isynth,[]); colormap(ax6,'gray');
-title('Raw (synthetic)','Color','w','FontSize',10);
-set(ax6,'XColor','none','YColor','none');
-
-ax7 = subplot(2,4,2);
-imshow(results{1,1},[]); colormap(ax7,'hot');
-title('logEnhance','Color','w','FontSize',10);
-set(ax7,'XColor','none','YColor','none');
-
-ax8 = subplot(2,4,3);
-imshow(results{1,5},[]); colormap(ax8,'hot');
-title('granulometry','Color','w','FontSize',10);
-set(ax8,'XColor','none','YColor','none');
-
-ax9 = subplot(2,4,4);
-imshow(diff_gran_log_synth,[-0.5 0.5]); colormap(ax9,bwr);
-cb2 = colorbar; cb2.Color = 'w';
-title('Gran − LoG (synthetic)','Color','w','FontSize',10);
-set(ax9,'XColor','none','YColor','none');
-
-% Row 2: real
-ax10 = subplot(2,4,5);
-imshow(Ireal,[]); colormap(ax10,'gray');
-title('Raw (real)','Color','w','FontSize',10);
-set(ax10,'XColor','none','YColor','none');
-
-ax11 = subplot(2,4,6);
-imshow(results{2,1},[]); colormap(ax11,'hot');
-title('logEnhance','Color','w','FontSize',10);
-set(ax11,'XColor','none','YColor','none');
-
-ax12 = subplot(2,4,7);
-imshow(results{2,5},[]); colormap(ax12,'hot');
-title('granulometry','Color','w','FontSize',10);
-set(ax12,'XColor','none','YColor','none');
-
-ax13 = subplot(2,4,8);
-imshow(diff_gran_log_real,[-0.5 0.5]); colormap(ax13,bwr);
-cb3 = colorbar; cb3.Color = 'w';
-title('Gran − LoG (real)','Color','w','FontSize',10);
-set(ax13,'XColor','none','YColor','none');
-
-sgtitle('Granulometry vs LoG — Scale-integrated morphological vs Laplacian response', ...
-        'Color','w','FontSize',13,'FontWeight','bold');
-
-% =========================================================================
-% 10. Figure 7 — Structure tensor coherence: rod vs puncta separation
+function mitoFillFigure(figNum, panels, figTitle, panelTitles, cmaps)
+% mitoFillFigure  Populate a 1×N panel figure with black background.
 %
-%     Coherence C ≈ 1 for elongated rods/fibres, C ≈ 0 for isotropic
-%     puncta and noise.  Applied as a multiplicative weight:
-%
-%       DoC × C       → rod / tubular channel   (puncta suppressed)
-%       LoG × (1−C)   → puncta channel          (rods suppressed)
-%
-%     Both derived maps are individually rescaled to [0,1] for display.
-% =========================================================================
-figure(7);
-set(gcf,'Name','Structure Tensor Coherence','NumberTitle','off', ...
-        'Color','k','Position',[180 180 1250 840]);
-
-for im = 1:2
-    C      = results{im,7};          % coherence map
-    capDoc = results{im,4};          % capsule DoC — rod-selective enhancer
-    logR   = results{im,1};          % logEnhance  — puncta-inclusive enhancer
-    lbl    = images{im,2};
-
-    rodW    = capDoc .* C;
-    mx = max(rodW(:));   if mx > 0, rodW    = rodW    / mx; end
-
-    punctaW = logR .* (1 - C);
-    mx = max(punctaW(:)); if mx > 0, punctaW = punctaW / mx; end
-
-    base = (im-1)*4;
-
-    ax = subplot(2,4, base+1);
-    imshow(images{im,1},[]); colormap(ax,'gray');
-    title(sprintf('Raw (%s)', lbl),'Color','w','FontSize',9);
-    set(ax,'XColor','none','YColor','none');
-
-    ax = subplot(2,4, base+2);
-    imshow(C,[]); colormap(ax,'parula');
-    title('Coherence C','Color','w','FontSize',9);
-    set(ax,'XColor','none','YColor','none');
-
-    ax = subplot(2,4, base+3);
-    imshow(rodW,[]); colormap(ax,'hot');
-    title('DoC \times C  (rods)','Color','w','FontSize',9);
-    set(ax,'XColor','none','YColor','none');
-
-    ax = subplot(2,4, base+4);
-    imshow(punctaW,[]); colormap(ax,'hot');
-    title('LoG \times (1-C)  (puncta)','Color','w','FontSize',9);
-    set(ax,'XColor','none','YColor','none');
-end
-sgtitle('Structure Tensor Coherence — Rod vs Puncta separation', ...
-        'Color','w','FontSize',13,'FontWeight','bold');
-
-% =========================================================================
-% 11. Figure 8 — Rod vs disk granulometry comparison
-%
-%     Disk granulometry (granulometryEnhance) integrates responses from
-%     isotropic disk openings: it responds to both compact puncta and short
-%     rods at the same scale.
-%
-%     Rod granulometry (rodGranulometryEnhance) uses oriented line openings:
-%     compact puncta cannot survive a line opening longer than their diameter,
-%     so the response is inherently selective for elongated structures without
-%     needing coherence post-weighting.
-%
-%     The difference map (disk − rod) highlights where disk gran responds to
-%     round/compact structures that rod gran suppresses.
-% =========================================================================
-diff_rod_disk_synth = results{1,5} - results{1,6};   % disk − rod (synthetic)
-diff_rod_disk_real  = results{2,5} - results{2,6};   % disk − rod (real)
-
-figure(8);
-set(gcf,'Name','Rod vs Disk Granulometry','NumberTitle','off', ...
-        'Color','k','Position',[210 210 1250 840]);
-
-% Row 1: synthetic
-ax14 = subplot(2,4,1);
-imshow(Isynth,[]); colormap(ax14,'gray');
-title('Raw (synthetic)','Color','w','FontSize',10);
-set(ax14,'XColor','none','YColor','none');
-
-ax15 = subplot(2,4,2);
-imshow(results{1,5},[]); colormap(ax15,'hot');
-title('Disk gran','Color','w','FontSize',10);
-set(ax15,'XColor','none','YColor','none');
-
-ax16 = subplot(2,4,3);
-imshow(results{1,6},[]); colormap(ax16,'hot');
-title('Rod gran','Color','w','FontSize',10);
-set(ax16,'XColor','none','YColor','none');
-
-ax17 = subplot(2,4,4);
-imshow(diff_rod_disk_synth,[-0.5 0.5]); colormap(ax17,bwr);
-cb4 = colorbar; cb4.Color = 'w';
-title('Disk − Rod (synthetic)','Color','w','FontSize',10);
-set(ax17,'XColor','none','YColor','none');
-
-% Row 2: real
-ax18 = subplot(2,4,5);
-imshow(Ireal,[]); colormap(ax18,'gray');
-title('Raw (real)','Color','w','FontSize',10);
-set(ax18,'XColor','none','YColor','none');
-
-ax19 = subplot(2,4,6);
-imshow(results{2,5},[]); colormap(ax19,'hot');
-title('Disk gran','Color','w','FontSize',10);
-set(ax19,'XColor','none','YColor','none');
-
-ax20 = subplot(2,4,7);
-imshow(results{2,6},[]); colormap(ax20,'hot');
-title('Rod gran','Color','w','FontSize',10);
-set(ax20,'XColor','none','YColor','none');
-
-ax21 = subplot(2,4,8);
-imshow(diff_rod_disk_real,[-0.5 0.5]); colormap(ax21,bwr);
-cb5 = colorbar; cb5.Color = 'w';
-title('Disk − Rod (real)','Color','w','FontSize',10);
-set(ax21,'XColor','none','YColor','none');
-
-sgtitle('Rod vs Disk Granulometry — Line openings suppress compact puncta', ...
-        'Color','w','FontSize',13,'FontWeight','bold');
-
-% =========================================================================
-% 12. Figure 9 — Cellpose deep-learning segmentation (conditional)
-%
-%     Cellpose cyto3 model applied to both images.  Three columns per row:
-%       Raw image | Binary detection mask | Coloured instance labels
-%
-%     Instance labels distinguish touching or overlapping objects that
-%     binary thresholding of enhancement maps cannot separate.
-%     This figure is only generated when the Cellpose add-on is available.
-% =========================================================================
-if hasCellpose
-    figure(9);
-    set(gcf,'Name','Cellpose Segmentation','NumberTitle','off', ...
-            'Color','k','Position',[240 240 1250 840]);
-
-    rowLabels = {'Synthetic', 'Real'};
-    rawImages = {Isynth, Ireal};
-    for im = 1:2
-        base = (im-1)*3;
-
-        ax = subplot(2,3, base+1);
-        imshow(rawImages{im},[]); colormap(ax,'gray');
-        title(sprintf('Raw (%s)', rowLabels{im}),'Color','w','FontSize',10);
-        set(ax,'XColor','none','YColor','none');
-
-        ax = subplot(2,3, base+2);
-        imshow(results{im,8},[]); colormap(ax,'hot');
-        title('Cellpose binary mask','Color','w','FontSize',10);
-        set(ax,'XColor','none','YColor','none');
-
-        ax = subplot(2,3, base+3);
-        if max(cpLabels{im}(:)) > 0
-            imshow(label2rgb(cpLabels{im}, 'hsv', 'k'));
+%   figNum      - integer figure number (figure must already exist)
+%   panels      - 1×N cell array of images
+%   figTitle    - sgtitle string
+%   panelTitles - 1×N cell of per-panel title strings
+%   cmaps       - 1×N cell of colormap names; [] signals truecolor RGB
+    figure(figNum);
+    N = numel(panels);
+    for k = 1:N
+        ax = subplot(1, N, k);
+        if isempty(cmaps{k})
+            imshow(panels{k});          % truecolor RGB (label2rgb output)
         else
-            imshow(zeros(size(cpLabels{im},1), size(cpLabels{im},2), 3));
+            imshow(panels{k}, []);
+            colormap(ax, cmaps{k});
         end
-        title(sprintf('Instance labels  (n=%d)', max(cpLabels{im}(:))), ...
-              'Color','w','FontSize',10);
-        set(ax,'XColor','none','YColor','none');
+        title(panelTitles{k}, 'Color', 'w', 'FontSize', 10);
+        set(ax, 'XColor', 'none', 'YColor', 'none');
     end
-    sgtitle(sprintf('Cellpose %s — Deep-learning segmentation', pCP.model), ...
-            'Color','w','FontSize',13,'FontWeight','bold');
+    sgtitle(figTitle, 'Color', 'w', 'FontSize', 13, 'FontWeight', 'bold');
 end
-
-nFigs = 8 + hasCellpose;
-fprintf('\nDone. %d figures generated.\n', nFigs);

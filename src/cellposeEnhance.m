@@ -9,13 +9,16 @@ function [R, L] = cellposeEnhance(I, params)
 %   I       - 2-D grayscale image (any numeric class); converted to
 %             single [0,1] internally via im2single.
 %   params  - optional struct with fields:
-%            .model    = 'cyto3'  % Cellpose model name or absolute path
-%                                 % to a custom model file
-%            .diameter = 10       % expected object diameter in pixels;
-%                                 % set to 0 to trigger auto-estimation
-%            .normalize = true    % included for API consistency with other
-%                                 % BlobFilters functions; output R is
-%                                 % always binary [0,1]
+%            .model         = 'cyto3' % Cellpose model name or absolute path
+%                                     % to a custom model file
+%            .diameter      = 10      % expected object diameter in pixels
+%            .cellProb      = 0       % cell probability threshold in [−6,6];
+%                                     % lower values detect fainter / smaller
+%                                     % objects (try −2 to −3 for organelles)
+%            .flowThreshold = 0.4     % flow-error threshold in [0.1,3];
+%                                     % higher values detect more objects
+%                                     % at the cost of boundary precision
+%            .normalize     = true    % API consistency; R is always binary
 %
 % OUTPUTS
 %   R       - binary enhancement map, single precision, same size as I.
@@ -42,11 +45,20 @@ function [R, L] = cellposeEnhance(I, params)
 %   avoid repeated model loading overhead.
 %
 %   MODEL SELECTION
-%   'cyto3'  — Cellpose 3 super-generalist cytoplasm model trained on 9
-%              heterogeneous datasets (Nature Methods 2025).  Good default
-%              for fluorescence mitochondria images.
-%   'cpsam'  — Cellpose-SAM (Cellpose 4); SAM ViT backbone fine-tuned on
-%              diverse biological images.  Current best general model.
+%   'cyto3'  — Cellpose 3 super-generalist cytoplasm model (DEFAULT).
+%              Trained on 9 heterogeneous datasets (Nature Methods 2025);
+%              best general-purpose choice for fluorescence mito images.
+%              Requires Python cellpose >= 3.x (the MATLAB add-on's
+%              downloadCellposeModels does not include cyto3; the function
+%              downloads it automatically via Python on first call).
+%   'cyto2'  — Cellpose 2 cytoplasm model.  Weights are in the MATLAB
+%              add-on's registry (downloadCellposeModels); loaded by file
+%              path, no Python download needed.  Safe fallback when
+%              Python cellpose 4.x is installed (cyto3 → cpsam in 4.x).
+%   'cpsam'  — Cellpose-SAM (Cellpose 4 only); SAM ViT backbone fine-tuned
+%              on diverse biological cell images.  Not suitable for small
+%              organelles such as mitochondria (returns blank masks with
+%              ImageCellDiameter = 10–80).
 %   'nuclei' — Nuclear segmentation model.
 %   Custom   — Pass an absolute path to a model file trained with the
 %              Cellpose GUI (human-in-the-loop mode) for best mitochondria
@@ -55,8 +67,22 @@ function [R, L] = cellposeEnhance(I, params)
 %   DIAMETER PARAMETER
 %   Set diameter to the expected object cross-section in pixels (not the
 %   long axis).  For ~8 px wide mitochondria, diameter = 8-12 is
-%   appropriate.  Setting diameter = 0 triggers Cellpose's built-in
-%   automatic size estimation via a companion size model (slower, ~2x).
+%   appropriate.  Cellpose internally rescales the image so that objects
+%   appear ~30 px wide before inference, so diameter accuracy matters more
+%   for boundary quality than for whether objects are detected at all.
+%
+%   SENSITIVITY PARAMETERS
+%   The two main knobs for improving recall on faint or small objects:
+%
+%   cellProb (CellThreshold, default 0, range −6 to 6):
+%     Lower values accept lower-probability detections.  Try −2 for
+%     organelles such as mitochondria; go to −3 if still missing objects.
+%     Values below −4 tend to produce excessive false positives.
+%
+%   flowThreshold (FlowErrorThreshold, default 0.4, range 0.1 to 3):
+%     Acceptable error between predicted and reconstructed flow fields.
+%     Increase to 0.8–1.0 to recover fragmentary or elongated objects
+%     whose flow fields are imperfect; at the cost of rougher boundaries.
 %
 %   OUTPUT CONVENTION
 %   Unlike all other BlobFilters enhancers, which return continuous
@@ -72,6 +98,13 @@ function [R, L] = cellposeEnhance(I, params)
 %     single [0,1] or raw uint8/uint16 both give equivalent results.
 %   - For 3-D stacks use segmentCells3D() from the Medical Imaging Toolbox
 %     directly; cellposeEnhance processes 2-D slices only.
+%   - The MATLAB add-on's model registry (downloadCellposeModels) only
+%     covers models up to Cellpose 2 ('cyto', 'cyto2', 'nuclei', ...).
+%     Newer models ('cyto3', 'cpsam') are NOT in that list and must be
+%     referenced by absolute file path.  cellposeEnhance resolves this
+%     automatically: if cellpose() rejects a model name, cpResolveModelPath
+%     uses the Python cellpose package to download the weights (first call
+%     only, ~250 MB) and returns the cached file path.
 %
 % REFERENCES
 %   Stringer~C., Wang~T., Michaelos~M. \& Pachitariu~M. (2021)
@@ -102,6 +135,11 @@ function [R, L] = cellposeEnhance(I, params)
 %   pCP.diameter = 10;       % ~8 px wide mitochondria
 %   [R, L] = cellposeEnhance(I, pCP);
 %
+%   % Increase recall for faint/small mitochondria
+%   pCP.cellProb      = -2;  % accept lower-probability detections
+%   pCP.flowThreshold = 0.8; % tolerate imperfect flow fields
+%   [R, L] = cellposeEnhance(I, pCP);
+%
 %   % Display results
 %   figure;
 %   subplot(1,3,1); imshow(I,[]);          title('Raw');
@@ -119,9 +157,11 @@ function [R, L] = cellposeEnhance(I, params)
 
 % --- defaults ---------------------------------------------------------------
 if nargin < 2, params = struct(); end
-if ~isfield(params, 'model'),     params.model     = 'cyto3'; end
-if ~isfield(params, 'diameter'),  params.diameter  = 10;      end
-if ~isfield(params, 'normalize'), params.normalize = true;    end
+if ~isfield(params, 'model'),         params.model         = 'cyto3'; end
+if ~isfield(params, 'diameter'),      params.diameter      = 10;      end
+if ~isfield(params, 'cellProb'),      params.cellProb      = -2;       end
+if ~isfield(params, 'flowThreshold'), params.flowThreshold = 0.8;     end
+if ~isfield(params, 'normalize'),     params.normalize     = true;    end
 
 % --- input validation -------------------------------------------------------
 if size(I, 3) > 1
@@ -140,11 +180,46 @@ end
 I = im2single(I);
 
 % --- run Cellpose -----------------------------------------------------------
-cp = cellpose(Model=params.model);
-L  = uint16(segmentCells2D(cp, I, ImageCellDiameter=params.diameter));
+% The MATLAB add-on only recognises models in its own registry (up to
+% Cellpose 2).  Newer names such as 'cyto3' / 'cpsam' require an absolute
+% file path.  If the named lookup fails, fall back to Python resolution.
+try
+    cp = cellpose(Model=params.model);
+catch ME
+    if contains(ME.message, 'Unable to find model file')
+        params.model = cpResolveModelPath(params.model);
+        cp = cellpose(Model=params.model);
+    else
+        rethrow(ME);
+    end
+end
+L  = uint16(segmentCells2D(cp, I, ...
+         ImageCellDiameter = params.diameter, ...
+         CellThreshold     = params.cellProb, ...
+         FlowErrorThreshold= params.flowThreshold));
 
 % Binary enhancement map: 1 inside detected objects, 0 in background.
 % Consistent with the [0,1] output convention of all other BlobFilters
 % enhancers.
 R = single(L > 0);
+end
+
+% ---- local helper -----------------------------------------------------------
+function p = cpResolveModelPath(modelName)
+% cpResolveModelPath  Resolve a Cellpose model name to its cached file path.
+%
+%   Uses the Python cellpose package to instantiate the requested model
+%   (downloading weights if they are not already cached) and returns the
+%   absolute path to the weight file.  This path can be passed directly to
+%   the MATLAB cellpose() constructor as a custom model.
+%
+%   Handles the Cellpose 4+ behaviour where 'cyto3' is silently redirected
+%   to 'cpsam' — the returned path reflects whichever file was actually
+%   cached, not the name requested.
+p = char(pyrun( ...
+    "from cellpose.models import CellposeModel; " + ...
+    "m = CellposeModel(model_type='" + modelName + "'); " + ...
+    "out = m.pretrained_model[0] if isinstance(m.pretrained_model, list) " + ...
+    "else m.pretrained_model", ...
+    "out"));
 end
