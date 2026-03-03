@@ -438,6 +438,69 @@ pCP.diameter = 10;
 [R, L] = cellposeEnhance(I, pCP);
 \end{lstlisting}
 
+\subsection*{Parameter optimisation for mitochondria fluorescence}
+\label{sec:cellpose-sweep}
+
+\newthought{A systematic sweep} of \texttt{cellProb} and
+\texttt{flowThreshold} was carried out using the companion script
+\texttt{sweepCellpose.m} (located in
+\texttt{Segmentation\_sandbox/demos/}) on a cropped fluorescence
+mitochondria image (\texttt{mitImagecrop.mat}, same field of view used
+throughout).  Two additional axes were explored: the specialised
+\texttt{bact\_fluor\_cp3} model (Cellpose~3, trained on fluorescent
+bacteria whose morphology resembles elongated mitochondria) and an
+increased iteration count (\texttt{nIter}~=~2000, recommended in the
+literature for long thin structures~\cite{Stringer2025}).
+
+\medskip
+\noindent\textbf{Parameters swept.}
+\marginnote{%
+  \textbf{Metrics} \\
+  \textit{n objects}: number of distinct detected objects
+  (\texttt{max(L(:))}); too high indicates over-segmentation or noise
+  detections. \\[4pt]
+  \textit{coverage\,\%}: fraction of image pixels labelled as
+  foreground; should match the expected mitochondrial area fraction.
+}
+\begin{itemize}
+  \item \texttt{cellProb} (\texttt{CellThreshold}): broad survey
+        $[-4, -3, -2, -1, 0, +1, +2]$, then narrowed to $[-2, -1, 0,
+        +1]$.
+  \item \texttt{flowThreshold} (\texttt{FlowErrorThreshold}): $[0.30,
+        0.50, 0.80, 1.20]$, narrowed to $[0.60, 0.80, 1.00, 1.20]$.
+  \item Models: \texttt{cyto3} and \texttt{bact\_fluor\_cp3}.
+  \item \texttt{nIter}: $0$ (default $\approx$200) and $2000$.
+\end{itemize}
+
+\noindent\textbf{Findings.}
+\begin{itemize}
+  \item \texttt{bact\_fluor\_cp3} produced over-segmentation on this
+        image and performed worse than \texttt{cyto3} across all
+        parameter combinations.
+  \item Increasing \texttt{nIter} to 2000 gave no improvement in object
+        count, coverage, or visual boundary quality for
+        \texttt{cyto3}.
+  \item The useful operating region for \texttt{cyto3} was
+        $\mathtt{cellProb} \in [-1, 0]$ combined with
+        $\mathtt{flowThreshold} \in [0.8, 1.2]$.  Outside this region
+        object counts increased sharply (over-segmentation) or dropped
+        steeply (under-detection).
+  \item $\mathtt{cellProb} = 0$ produced visually tighter outlines that
+        better matched individual mitochondria compared with the more
+        permissive $-1$.
+\end{itemize}
+
+\noindent\textbf{Recommended settings} (used as ground truth in
+\texttt{sweepSegmentation.m}):
+
+\begin{lstlisting}
+pCP.model         = 'cyto3';
+pCP.diameter      = 10;      % px — typical mitochondrion cross-section
+pCP.cellProb      = 0;       % CellThreshold; lower = more sensitive
+pCP.flowThreshold = 0.8;     % FlowErrorThreshold
+[R, L] = cellposeEnhance(I, pCP);
+\end{lstlisting}
+
 % =============================================================================
 \chapter{Orientation Analysis and Pre-filtering}
 \label{ch:orientation}
