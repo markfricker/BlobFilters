@@ -14,7 +14,10 @@ function [R, L] = cellposeEnhance(I, params)
 %            .diameter      = 10      % expected object diameter in pixels
 %            .cellProb      = 0       % cell probability threshold in [−6,6];
 %                                     % lower values detect fainter / smaller
-%                                     % objects (try −2 to −3 for organelles)
+%                                     % objects.  0 found optimal for
+%                                     % mitochondria fluorescence (sweepCellpose
+%                                     % 2026-03-03); try −1 for slightly higher
+%                                     % recall at cost of more false positives.
 %            .flowThreshold = 0.4     % flow-error threshold in [0.1,3];
 %                                     % higher values detect more objects
 %                                     % at the cost of boundary precision
@@ -88,9 +91,10 @@ function [R, L] = cellposeEnhance(I, params)
 %   The two main knobs for improving recall on faint or small objects:
 %
 %   cellProb (CellThreshold, default 0, range −6 to 6):
-%     Lower values accept lower-probability detections.  Try −2 for
-%     organelles such as mitochondria; go to −3 if still missing objects.
-%     Values below −4 tend to produce excessive false positives.
+%     Lower values accept lower-probability detections.  Empirically,
+%     0 gives the best boundary quality for mitochondria fluorescence
+%     images (sweepCellpose, 2026-03-03); try −1 for slightly higher
+%     recall.  Values below −3 tend to produce excessive false positives.
 %
 %   flowThreshold (FlowErrorThreshold, default 0.4, range 0.1 to 3):
 %     Acceptable error between predicted and reconstructed flow fields.
