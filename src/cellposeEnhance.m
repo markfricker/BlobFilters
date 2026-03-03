@@ -18,6 +18,13 @@ function [R, L] = cellposeEnhance(I, params)
 %            .flowThreshold = 0.4     % flow-error threshold in [0.1,3];
 %                                     % higher values detect more objects
 %                                     % at the cost of boundary precision
+%            .nIter         = 0       % Cellpose gradient-descent iterations.
+%                                     % 0 = use Cellpose default (~200).
+%                                     % Set to 2000 for cyto3 on long thin
+%                                     % structures (mitochondria, bacteria).
+%                                     % Uses the Python Cellpose API directly
+%                                     % (MathWorks segmentCells2D does not
+%                                     % expose this parameter).
 %            .normalize     = true    % API consistency; R is always binary
 %
 % OUTPUTS
@@ -51,6 +58,12 @@ function [R, L] = cellposeEnhance(I, params)
 %              Requires Python cellpose >= 3.x (the MATLAB add-on's
 %              downloadCellposeModels does not include cyto3; the function
 %              downloads it automatically via Python on first call).
+%   'bact_fluor_cp3' — Cellpose 3 model trained specifically on fluorescent
+%              bacterial images.  Bacteria and mitochondria share similar
+%              elongated morphology, making this model a strong alternative
+%              to cyto3 for organelle segmentation.  Weights are downloaded
+%              automatically on first call (~80 MB).  Use nIter = 2000 for
+%              best results on long thin mitochondria.
 %   'cyto2'  — Cellpose 2 cytoplasm model.  Weights are in the MATLAB
 %              add-on's registry (downloadCellposeModels); loaded by file
 %              path, no Python download needed.  Safe fallback when
@@ -98,13 +111,20 @@ function [R, L] = cellposeEnhance(I, params)
 %     single [0,1] or raw uint8/uint16 both give equivalent results.
 %   - For 3-D stacks use segmentCells3D() from the Medical Imaging Toolbox
 %     directly; cellposeEnhance processes 2-D slices only.
+%   - When nIter > 0, cellposeEnhance bypasses segmentCells2D entirely and
+%     calls the Python CellposeModel.eval() API directly (since the MATLAB
+%     wrapper does not expose niter).  This requires MATLAB R2022a+ for
+%     correct numpy <-> MATLAB array conversion.  In this path the model is
+%     resolved by Python directly, so cpResolveModelPath is not called.
 %   - The MATLAB add-on's model registry (downloadCellposeModels) only
 %     covers models up to Cellpose 2 ('cyto', 'cyto2', 'nuclei', ...).
-%     Newer models ('cyto3', 'cpsam') are NOT in that list and must be
-%     referenced by absolute file path.  cellposeEnhance resolves this
-%     automatically: if cellpose() rejects a model name, cpResolveModelPath
-%     uses the Python cellpose package to download the weights (first call
-%     only, ~250 MB) and returns the cached file path.
+%     Newer models ('cyto3', 'bact_fluor_cp3', 'cpsam') are NOT in that
+%     list and must be referenced by absolute file path.
+%     cellposeEnhance resolves this automatically: if cellpose() rejects a
+%     model name, cpResolveModelPath uses the Python cellpose package to
+%     download the weights (first call only) and returns the cached file
+%     path.  When nIter > 0 the Python path handles model resolution
+%     natively without cpResolveModelPath.
 %
 % REFERENCES
 %   Stringer~C., Wang~T., Michaelos~M. \& Pachitariu~M. (2021)
@@ -149,6 +169,16 @@ function [R, L] = cellposeEnhance(I, params)
 %   % Use binary mask as weight on another enhancer
 %   R_rod = rodGranulometryEnhance(I) .* R;
 %
+%   % cyto3 with increased niter for elongated mitochondria (literature rec.)
+%   pCP.model = 'cyto3';
+%   pCP.nIter = 2000;    % uses Python API directly; not exposed by MATLAB add-on
+%   [R, L] = cellposeEnhance(I, pCP);
+%
+%   % bact_fluor_cp3: Cellpose3 model trained on fluorescent bacteria (good for mito)
+%   pCP.model = 'bact_fluor_cp3';
+%   pCP.nIter = 2000;
+%   [R, L] = cellposeEnhance(I, pCP);
+%
 %   % Custom fine-tuned model
 %   pCP.model = 'C:\models\mito_finetuned';
 %   [R, L] = cellposeEnhance(I, pCP);
@@ -161,6 +191,7 @@ if ~isfield(params, 'model'),         params.model         = 'cyto3'; end
 if ~isfield(params, 'diameter'),      params.diameter      = 10;      end
 if ~isfield(params, 'cellProb'),      params.cellProb      = -2;       end
 if ~isfield(params, 'flowThreshold'), params.flowThreshold = 0.8;     end
+if ~isfield(params, 'nIter'),         params.nIter         = 0;       end
 if ~isfield(params, 'normalize'),     params.normalize     = true;    end
 
 % --- input validation -------------------------------------------------------
@@ -178,6 +209,16 @@ if exist('cellpose', 'file') == 0
 end
 
 I = im2single(I);
+
+% --- nIter > 0: bypass segmentCells2D and call Python directly --------------
+% MathWorks segmentCells2D does not expose the niter parameter.
+% When the user sets nIter, we call CellposeModel.eval() via pyrun instead.
+if params.nIter > 0
+    [R, L] = cpRunWithNIter(I, params.model, params.diameter, ...
+                            params.cellProb, params.flowThreshold, ...
+                            params.nIter);
+    return
+end
 
 % --- run Cellpose -----------------------------------------------------------
 % The MATLAB add-on only recognises models in its own registry (up to
@@ -203,6 +244,45 @@ L  = uint16(segmentCells2D(cp, I, ...
 % enhancers.
 R = single(L > 0);
 end
+
+% ---- local helper: Python Cellpose with niter support ----------------------
+function [R, L] = cpRunWithNIter(I, modelName, diameter, cellProb, flowThreshold, nIter)
+% cpRunWithNIter  Cellpose segmentation via direct Python call.
+%   Supports the niter parameter, which MathWorks segmentCells2D() does not
+%   expose.  Named models ('cyto3', 'bact_fluor_cp3', etc.) are resolved by
+%   the Python Cellpose package directly (downloading weights on first call).
+%   Custom paths are passed via pretrained_model.  Requires MATLAB R2022a+.
+%
+%   I is already im2single [0,1] on entry.
+
+% Select the Python constructor keyword based on whether modelName is a path
+if contains(modelName, filesep) || contains(modelName, '/')
+    ctorStr = "CellposeModel(pretrained_model='" + modelName + "')";
+else
+    ctorStr = "CellposeModel(model_type='" + modelName + "')";
+end
+
+masks = pyrun([ ...
+    "from cellpose.models import CellposeModel; " ...
+    "import numpy as np; " ...
+    "m = " + ctorStr + "; " ...
+    "msk, _, _ = m.eval([img.astype(np.float32)], " ...
+    "    diameter=float(diam), niter=int(nit), " ...
+    "    cellprob_threshold=float(cp), " ...
+    "    flow_threshold=float(ft), do_3D=False); " ...
+    "out = msk[0].astype(np.uint16)"], ...
+    "out", img=double(I), diam=diameter, nit=int32(nIter), ...
+    cp=cellProb, ft=flowThreshold);
+
+% Convert numpy uint16 [H x W] → MATLAB uint16 matrix.
+% double() intermediate handles numpy→MATLAB conversion (R2022a+).
+L = uint16(double(masks));
+if ~isequal(size(L), size(I))
+    L = L';   % transpose if MATLAB/Python axis order is swapped
+end
+R = single(L > 0);
+end
+
 
 % ---- local helper -----------------------------------------------------------
 function p = cpResolveModelPath(modelName)
