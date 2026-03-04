@@ -490,6 +490,44 @@ literature for long thin structures~\cite{Stringer2025}).
         permissive $-1$.
 \end{itemize}
 
+\noindent\textbf{Results} (n\,objects / coverage\,\%, \texttt{minSize}~=~64\,px$^2$).
+
+% --- cyto3, default nIter table ------------------------------------------
+\IfFileExists{figures/cellpose_sweep_table_cyto3.tex}{%
+\begin{table}
+  \caption{\texttt{cyto3}, default \texttt{nIter}.}
+  \centering\small
+  \input{figures/cellpose_sweep_table_cyto3}
+\end{table}
+}{%
+\begin{quote}\textit{Run \texttt{sweepCellpose.m} with \texttt{doExport = true}
+  to generate \texttt{cellpose\_sweep\_table\_cyto3.tex}.}\end{quote}
+}
+
+% --- cyto3, nIter=2000 table ---------------------------------------------
+\IfFileExists{figures/cellpose_sweep_table_cyto3_nIter-2000.tex}{%
+\begin{table}
+  \caption{\texttt{cyto3}, \texttt{nIter}~=~2000.}
+  \centering\small
+  \input{figures/cellpose_sweep_table_cyto3_nIter-2000}
+\end{table}
+}{%
+\begin{quote}\textit{Run \texttt{sweepCellpose.m} with \texttt{doExport = true}
+  to generate \texttt{cellpose\_sweep\_table\_cyto3\_nIter-2000.tex}.}\end{quote}
+}
+
+% --- bact\_fluor\_cp3 table -----------------------------------------------
+\IfFileExists{figures/cellpose_sweep_table_bact_fluor_cp3.tex}{%
+\begin{table}
+  \caption{\texttt{bact\_fluor\_cp3}, default \texttt{nIter}.}
+  \centering\small
+  \input{figures/cellpose_sweep_table_bact_fluor_cp3}
+\end{table}
+}{%
+\begin{quote}\textit{Run \texttt{sweepCellpose.m} with \texttt{doExport = true}
+  to generate \texttt{cellpose\_sweep\_table\_bact\_fluor\_cp3.tex}.}\end{quote}
+}
+
 \noindent\textbf{Recommended settings} (used as ground truth in
 \texttt{sweepSegmentation.m}):
 
