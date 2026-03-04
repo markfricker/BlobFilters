@@ -1,7 +1,4 @@
 %% BlobFilters_manual.tex
-%% natbib is loaded by tufte-book; force numerical citation style so that
-%% a plain thebibliography environment is compatible.
-\PassOptionsToPackage{numbers,sort&compress}{natbib}
 %%
 %% Manual for the BlobFilters MATLAB toolbox.
 %% Typeset with the Tufte-LaTeX book class.
@@ -11,9 +8,7 @@
 %%   geometry, amsmath, booktabs, graphicx, listings, microtype,
 %%   xcolor, hyperref  (all standard TeX Live / MiKTeX packages)
 %%
-%% Compile sequence (pdflatex + bibtex)
-%%   pdflatex BlobFilters_manual
-%%   bibtex   BlobFilters_manual
+%% Compile sequence (pdflatex only -- bibliography is inline \begin{thebibliography})
 %%   pdflatex BlobFilters_manual
 %%   pdflatex BlobFilters_manual
 %%
@@ -29,9 +24,9 @@
 \usepackage{graphicx}
 \usepackage{microtype}
 \usepackage{xcolor}
-\usepackage{hyperref}
 \usepackage{listings}
-\usepackage{caption}
+% hyperref must be loaded last to avoid overwriting Tufte's margin-citation machinery
+\usepackage{hyperref}
 
 % ---- listings style (MATLAB) ------------------------------------------------
 \definecolor{mComment}{rgb}{0.13,0.55,0.13}
