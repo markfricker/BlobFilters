@@ -464,10 +464,10 @@ literature for long thin structures~\cite{Stringer2025}).
 }
 \begin{itemize}
   \item \texttt{cellProb} (\texttt{CellThreshold}): broad survey
-        $[-4, -3, -2, -1, 0, +1, +2]$, then narrowed to $[-2, -1, 0,
-        +1]$.
+        $[-4, \ldots, +2]$, narrowed to $[-2, -1, 0, +1]$, then
+        finalised at $[-1, 0, +1]$.
   \item \texttt{flowThreshold} (\texttt{FlowErrorThreshold}): $[0.30,
-        0.50, 0.80, 1.20]$, narrowed to $[0.60, 0.80, 1.00, 1.20]$.
+        0.50, 0.80, 1.20]$, finalised at $[0.60, 0.80, 1.00]$.
   \item Models: \texttt{cyto3} and \texttt{bact\_fluor\_cp3}.
   \item \texttt{nIter}: $0$ (default $\approx$200) and $2000$.
 \end{itemize}
@@ -500,6 +500,43 @@ pCP.cellProb      = 0;       % CellThreshold; lower = more sensitive
 pCP.flowThreshold = 0.8;     % FlowErrorThreshold
 [R, L] = cellposeEnhance(I, pCP);
 \end{lstlisting}
+
+\IfFileExists{figures/cellpose_sweep_heatmaps_cyto3.pdf}{%
+\begin{figure*}
+  \includegraphics[width=\linewidth]{figures/cellpose_sweep_heatmaps_cyto3.pdf}
+  \caption{\texttt{cyto3} parameter sweep heatmaps.  Left: number of detected
+    objects.  Right: foreground coverage~(\%).  Rows correspond to
+    \texttt{cellProb} $\in \{-1, 0, +1\}$; columns to
+    \texttt{flowThreshold} $\in \{0.60, 0.80, 1.00\}$.
+    The cell at $\mathtt{cellProb}=0$, $\mathtt{flowThreshold}=0.8$ gives
+    the best balance of object count and boundary tightness.}
+  \label{fig:cellpose-sweep-heatmaps}
+\end{figure*}
+}{%
+\begin{quote}
+  \textit{Figure not available: run \texttt{sweepCellpose.m} (with
+  \texttt{doExport = true}) to generate
+  \texttt{cellpose\_sweep\_heatmaps\_cyto3.pdf}.}
+\end{quote}
+}
+
+\IfFileExists{figures/cellpose_sweep_labels_cyto3.pdf}{%
+\begin{figure*}
+  \includegraphics[width=\linewidth]{figures/cellpose_sweep_labels_cyto3.pdf}
+  \caption{Visual label grid for the \texttt{cyto3} sweep.  Each row is a
+    \texttt{cellProb} value ($-1$, $0$, $+1$); the first column shows the raw
+    image annotated with the row label, and columns 2--4 show instance labels
+    (\texttt{label2rgb}) for \texttt{flowThreshold} $= 0.60$, $0.80$,
+    $1.00$ respectively.  Black pixels are background.}
+  \label{fig:cellpose-sweep-labels}
+\end{figure*}
+}{%
+\begin{quote}
+  \textit{Figure not available: run \texttt{sweepCellpose.m} (with
+  \texttt{doExport = true}) to generate
+  \texttt{cellpose\_sweep\_labels\_cyto3.pdf}.}
+\end{quote}
+}
 
 % =============================================================================
 \chapter{Orientation Analysis and Pre-filtering}
