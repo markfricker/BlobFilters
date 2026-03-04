@@ -501,41 +501,90 @@ pCP.flowThreshold = 0.8;     % FlowErrorThreshold
 [R, L] = cellposeEnhance(I, pCP);
 \end{lstlisting}
 
+% --- cyto3, default nIter ------------------------------------------------
 \IfFileExists{figures/cellpose_sweep_heatmaps_cyto3.pdf}{%
 \begin{figure*}
   \includegraphics[width=\linewidth]{figures/cellpose_sweep_heatmaps_cyto3.pdf}
-  \caption{\texttt{cyto3} parameter sweep heatmaps.  Left: number of detected
-    objects.  Right: foreground coverage~(\%).  Rows correspond to
-    \texttt{cellProb} $\in \{-1, 0, +1\}$; columns to
-    \texttt{flowThreshold} $\in \{0.60, 0.80, 1.00\}$.
+  \caption{\texttt{cyto3} sweep heatmaps (default \texttt{nIter}).
+    Left: number of detected objects.  Right: foreground coverage~(\%).
+    Rows = \texttt{cellProb} $\in \{-1, 0, +1\}$;
+    columns = \texttt{flowThreshold} $\in \{0.60, 0.80, 1.00\}$.
     The cell at $\mathtt{cellProb}=0$, $\mathtt{flowThreshold}=0.8$ gives
     the best balance of object count and boundary tightness.}
-  \label{fig:cellpose-sweep-heatmaps}
+  \label{fig:cellpose-cyto3-heatmaps}
 \end{figure*}
 }{%
-\begin{quote}
-  \textit{Figure not available: run \texttt{sweepCellpose.m} (with
-  \texttt{doExport = true}) to generate
-  \texttt{cellpose\_sweep\_heatmaps\_cyto3.pdf}.}
-\end{quote}
+\begin{quote}\textit{Run \texttt{sweepCellpose.m} with \texttt{doExport = true}
+  to generate \texttt{cellpose\_sweep\_heatmaps\_cyto3.pdf}.}\end{quote}
 }
 
 \IfFileExists{figures/cellpose_sweep_labels_cyto3.pdf}{%
 \begin{figure*}
   \includegraphics[width=\linewidth]{figures/cellpose_sweep_labels_cyto3.pdf}
-  \caption{Visual label grid for the \texttt{cyto3} sweep.  Each row is a
-    \texttt{cellProb} value ($-1$, $0$, $+1$); the first column shows the raw
-    image annotated with the row label, and columns 2--4 show instance labels
-    (\texttt{label2rgb}) for \texttt{flowThreshold} $= 0.60$, $0.80$,
-    $1.00$ respectively.  Black pixels are background.}
-  \label{fig:cellpose-sweep-labels}
+  \caption{\texttt{cyto3} label grid (default \texttt{nIter}).
+    Rows = \texttt{cellProb} ($-1$, $0$, $+1$).  Column~1: raw image.
+    Columns 2--4: instance labels (\texttt{label2rgb}) for
+    \texttt{flowThreshold} $= 0.60$, $0.80$, $1.00$.
+    Black pixels are background.}
+  \label{fig:cellpose-cyto3-labels}
 \end{figure*}
 }{%
-\begin{quote}
-  \textit{Figure not available: run \texttt{sweepCellpose.m} (with
-  \texttt{doExport = true}) to generate
-  \texttt{cellpose\_sweep\_labels\_cyto3.pdf}.}
-\end{quote}
+\begin{quote}\textit{Run \texttt{sweepCellpose.m} with \texttt{doExport = true}
+  to generate \texttt{cellpose\_sweep\_labels\_cyto3.pdf}.}\end{quote}
+}
+
+% --- cyto3, nIter = 2000 -------------------------------------------------
+\IfFileExists{figures/cellpose_sweep_heatmaps_cyto3_nIter-2000.pdf}{%
+\begin{figure*}
+  \includegraphics[width=\linewidth]{figures/cellpose_sweep_heatmaps_cyto3_nIter-2000.pdf}
+  \caption{\texttt{cyto3} sweep heatmaps with \texttt{nIter}~=~2000.
+    Layout as Figure~\ref{fig:cellpose-cyto3-heatmaps}.
+    Compare with the default-\texttt{nIter} result to assess whether
+    additional iterations alter object count or coverage.}
+  \label{fig:cellpose-cyto3-niter-heatmaps}
+\end{figure*}
+}{%
+\begin{quote}\textit{Run \texttt{sweepCellpose.m} with \texttt{doExport = true}
+  to generate \texttt{cellpose\_sweep\_heatmaps\_cyto3\_nIter-2000.pdf}.}\end{quote}
+}
+
+\IfFileExists{figures/cellpose_sweep_labels_cyto3_nIter-2000.pdf}{%
+\begin{figure*}
+  \includegraphics[width=\linewidth]{figures/cellpose_sweep_labels_cyto3_nIter-2000.pdf}
+  \caption{\texttt{cyto3} label grid with \texttt{nIter}~=~2000.
+    Layout as Figure~\ref{fig:cellpose-cyto3-labels}.}
+  \label{fig:cellpose-cyto3-niter-labels}
+\end{figure*}
+}{%
+\begin{quote}\textit{Run \texttt{sweepCellpose.m} with \texttt{doExport = true}
+  to generate \texttt{cellpose\_sweep\_labels\_cyto3\_nIter-2000.pdf}.}\end{quote}
+}
+
+% --- bact\_fluor\_cp3, default nIter -------------------------------------
+\IfFileExists{figures/cellpose_sweep_heatmaps_bact_fluor_cp3.pdf}{%
+\begin{figure*}
+  \includegraphics[width=\linewidth]{figures/cellpose_sweep_heatmaps_bact_fluor_cp3.pdf}
+  \caption{\texttt{bact\_fluor\_cp3} sweep heatmaps (default \texttt{nIter}).
+    Layout as Figure~\ref{fig:cellpose-cyto3-heatmaps}.
+    This model is trained on fluorescent bacteria; compare object counts
+    and coverage with the \texttt{cyto3} results above.}
+  \label{fig:cellpose-bact-heatmaps}
+\end{figure*}
+}{%
+\begin{quote}\textit{Run \texttt{sweepCellpose.m} with \texttt{doExport = true}
+  to generate \texttt{cellpose\_sweep\_heatmaps\_bact\_fluor\_cp3.pdf}.}\end{quote}
+}
+
+\IfFileExists{figures/cellpose_sweep_labels_bact_fluor_cp3.pdf}{%
+\begin{figure*}
+  \includegraphics[width=\linewidth]{figures/cellpose_sweep_labels_bact_fluor_cp3.pdf}
+  \caption{\texttt{bact\_fluor\_cp3} label grid (default \texttt{nIter}).
+    Layout as Figure~\ref{fig:cellpose-cyto3-labels}.}
+  \label{fig:cellpose-bact-labels}
+\end{figure*}
+}{%
+\begin{quote}\textit{Run \texttt{sweepCellpose.m} with \texttt{doExport = true}
+  to generate \texttt{cellpose\_sweep\_labels\_bact\_fluor\_cp3.pdf}.}\end{quote}
 }
 
 % =============================================================================
