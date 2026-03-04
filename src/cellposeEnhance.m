@@ -29,6 +29,12 @@ function [R, L] = cellposeEnhance(I, params)
 %                                     % (MathWorks segmentCells2D does not
 %                                     % expose this parameter).
 %            .normalize     = true    % API consistency; R is always binary
+%            .minSize       = 0       % minimum object area in px^2.
+%                                     % Objects with fewer pixels are removed
+%                                     % from L and R after segmentation.
+%                                     % 0 = keep all objects (no filtering).
+%                                     % ~50 recommended when comparing models
+%                                     % that differ in false-positive rate.
 %
 % OUTPUTS
 %   R       - binary enhancement map, single precision, same size as I.
@@ -120,6 +126,9 @@ function [R, L] = cellposeEnhance(I, params)
 %     wrapper does not expose niter).  This requires MATLAB R2022a+ for
 %     correct numpy <-> MATLAB array conversion.  In this path the model is
 %     resolved by Python directly, so cpResolveModelPath is not called.
+%   - When minSize > 0, objects with fewer than minSize pixels are removed
+%     from L post-hoc; labels are renumbered consecutively after filtering.
+%     Applied to both code paths (MATLAB add-on and Python nIter path).
 %   - The MATLAB add-on's model registry (downloadCellposeModels) only
 %     covers models up to Cellpose 2 ('cyto', 'cyto2', 'nuclei', ...).
 %     Newer models ('cyto3', 'bact_fluor_cp3', 'cpsam') are NOT in that
@@ -196,6 +205,7 @@ if ~isfield(params, 'diameter'),      params.diameter      = 10;      end
 if ~isfield(params, 'cellProb'),      params.cellProb      = 0;        end
 if ~isfield(params, 'flowThreshold'), params.flowThreshold = 0.8;     end
 if ~isfield(params, 'nIter'),         params.nIter         = 0;       end
+if ~isfield(params, 'minSize'),       params.minSize       = 0;       end
 if ~isfield(params, 'normalize'),     params.normalize     = true;    end
 
 % --- input validation -------------------------------------------------------
@@ -214,39 +224,48 @@ end
 
 I = im2single(I);
 
-% --- nIter > 0: bypass segmentCells2D and call Python directly --------------
-% MathWorks segmentCells2D does not expose the niter parameter.
-% When the user sets nIter, we call CellposeModel.eval() via pyrun instead.
+% --- run Cellpose -----------------------------------------------------------
 if params.nIter > 0
+    % Python path: MathWorks segmentCells2D does not expose niter, so call
+    % CellposeModel.eval() directly via pyrun.
     [R, L] = cpRunWithNIter(I, params.model, params.diameter, ...
                             params.cellProb, params.flowThreshold, ...
                             params.nIter);
-    return
-end
-
-% --- run Cellpose -----------------------------------------------------------
-% The MATLAB add-on only recognises models in its own registry (up to
-% Cellpose 2).  Newer names such as 'cyto3' / 'cpsam' require an absolute
-% file path.  If the named lookup fails, fall back to Python resolution.
-try
-    cp = cellpose(Model=params.model);
-catch ME
-    if contains(ME.message, 'Unable to find model file')
-        params.model = cpResolveModelPath(params.model);
+else
+    % MATLAB add-on path.  Newer model names (cyto3, bact_fluor_cp3, cpsam)
+    % are not in the add-on's registry; fall back to Python path resolution.
+    try
         cp = cellpose(Model=params.model);
-    else
-        rethrow(ME);
+    catch ME
+        if contains(ME.message, 'Unable to find model file')
+            params.model = cpResolveModelPath(params.model);
+            cp = cellpose(Model=params.model);
+        else
+            rethrow(ME);
+        end
     end
+    L = uint16(segmentCells2D(cp, I, ...
+             ImageCellDiameter = params.diameter, ...
+             CellThreshold     = params.cellProb, ...
+             FlowErrorThreshold= params.flowThreshold));
+    % Binary enhancement map: 1 inside detected objects, 0 in background.
+    R = single(L > 0);
 end
-L  = uint16(segmentCells2D(cp, I, ...
-         ImageCellDiameter = params.diameter, ...
-         CellThreshold     = params.cellProb, ...
-         FlowErrorThreshold= params.flowThreshold));
 
-% Binary enhancement map: 1 inside detected objects, 0 in background.
-% Consistent with the [0,1] output convention of all other BlobFilters
-% enhancers.
-R = single(L > 0);
+% --- post-filter: discard objects smaller than minSize ----------------------
+if params.minSize > 0 && max(L(:)) > 0
+    st   = regionprops(L, 'Area', 'PixelIdxList');
+    Lnew = zeros(size(L), 'uint16');
+    newk = 0;
+    for k = 1:numel(st)
+        if st(k).Area >= params.minSize
+            newk = newk + 1;
+            Lnew(st(k).PixelIdxList) = uint16(newk);
+        end
+    end
+    L = Lnew;
+    R = single(L > 0);
+end
 end
 
 % ---- local helper: Python Cellpose with niter support ----------------------
