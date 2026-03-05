@@ -101,7 +101,7 @@ pRodGran.normalize    = true;
 %   (default 0.4; range 0.1-3 — higher = more detections, rougher boundaries)
 pCP.model         = 'cyto3';
 pCP.diameter      = 10;
-pCP.cellProb      = -2;
+pCP.cellProb      = 0;
 pCP.flowThreshold = 0.8;
 
 % =========================================================================
