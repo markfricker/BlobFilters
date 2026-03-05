@@ -887,6 +887,182 @@ Three columns are shown per image row:
 \end{quote}
 }
 
+% -------------------------------------------------------------------------
+\section{\texttt{demoSegmentation}}
+\label{sec:demoSeg}
+
+\newthought{This script} benchmarks all five classical rod detectors against a
+Cellpose ground truth on the cropped mitochondria image
+(\texttt{mitImagecrop.mat}).  For each enhancer, a grid of parameter
+configurations is swept together with a per-task watershed grid; the
+best-\mbox{F1} watershed result for every configuration is shown in a single
+figure.  A final HSV overlay figure compares the best result per enhancer
+on a perceptually uniform background.
+
+\medskip
+\noindent\textbf{Ground truth.}\quad
+\texttt{cellposeEnhance} with \texttt{cyto3}, $\mathtt{diameter}=10$\,px,
+$\mathtt{cellProb}=0$, $\mathtt{flowThreshold}=0.8$,
+$\mathtt{minSize}=64$\,px$^2$.
+
+\medskip
+\noindent\textbf{Pipeline.}
+\begin{enumerate}
+  \item OGS pre-filtering ($\sigma_\parallel=4$, $\sigma_\perp=1.5$,
+        8 orientations).
+  \item For each enhancer: sweep parameter configurations $\times$ watershed
+        combos; retain best-\mbox{F1} result per configuration.
+  \item One figure per enhancer (Figures~\ref{fig:demoSeg-log}--\ref{fig:demoSeg-rod});
+        HSV overlay summary (Figure~\ref{fig:demoSeg-hsv}).
+\end{enumerate}
+
+\noindent\textbf{Watershed parameters swept.}
+
+\marginnote{%
+  Capsule thresholds are raised to $[0.30$--$0.50]$ and hysteresis lower
+  bounds to $\{0.20, 0.25\}$ because capsule maps carry a higher background
+  pedestal than LoG or granulometry maps.
+}
+
+\begin{itemize}
+  \item \texttt{threshold}: $[0.20, 0.25, 0.30, 0.35, 0.40]$ (log, fiber,
+        rod); $[0.30, 0.35, 0.40, 0.45, 0.50]$ (capsule single and DoC).
+  \item \texttt{hMinima}: $[0.02, 0.05, 0.10]$.
+  \item \texttt{minArea}: $[20, 50]$\,px$^2$.
+  \item Hysteresis \texttt{threshLow}: none / $0.10$ / $0.15$ (default);
+        none / $0.20$ / $0.25$ (capsule).
+\end{itemize}
+
+\IfFileExists{figures/demoSeg_log_WS.pdf}{%
+\begin{figure*}
+  \includegraphics[width=\linewidth]{figures/demoSeg_log_WS.pdf}
+  \caption{\texttt{logEnhance} parameter sweep.
+    Columns: raw image~$|$~best-\mbox{F1} watershed result for each of the
+    four $\sigma$ configurations ($[2\!-\!4]$, $[3\!-\!5]$, $[4\!-\!6]$,
+    $[3\!-\!6]$)~$|$~Cellpose GT\@.
+    F1 score and object count are annotated in each panel.}
+  \label{fig:demoSeg-log}
+\end{figure*}
+}{%
+\begin{quote}\textit{Run \texttt{demoSegmentation.m} with
+  \texttt{doExport = true} to generate
+  \texttt{demoSeg\_log\_WS.pdf}.}\end{quote}
+}
+
+\IfFileExists{figures/demoSeg_fib_WS.pdf}{%
+\begin{figure*}
+  \includegraphics[width=\linewidth]{figures/demoSeg_fib_WS.pdf}
+  \caption{\texttt{fiberEnhance} parameter sweep.
+    Three cross-sectional width configurations (\texttt{stack} mode):
+    $\mathtt{widths}=[8,9,10]$, $[9,10,11,12]$, $[10,12,14]$.}
+  \label{fig:demoSeg-fib}
+\end{figure*}
+}{%
+\begin{quote}\textit{Run \texttt{demoSegmentation.m} with
+  \texttt{doExport = true} to generate
+  \texttt{demoSeg\_fib\_WS.pdf}.}\end{quote}
+}
+
+\IfFileExists{figures/demoSeg_capS_WS.pdf}{%
+\begin{figure*}
+  \includegraphics[width=\linewidth]{figures/demoSeg_capS_WS.pdf}
+  \caption{\texttt{capsuleEnhance} (single mode) parameter sweep.
+    Three half-length / width configurations (12 orientations each):
+    $(\ell=[8,12,16], w=8)$, $([12,16,20], w=10)$, $([16,20,24], w=10)$.}
+  \label{fig:demoSeg-capS}
+\end{figure*}
+}{%
+\begin{quote}\textit{Run \texttt{demoSegmentation.m} with
+  \texttt{doExport = true} to generate
+  \texttt{demoSeg\_capS\_WS.pdf}.}\end{quote}
+}
+
+\IfFileExists{figures/demoSeg_capD_WS.pdf}{%
+\begin{figure*}
+  \includegraphics[width=\linewidth]{figures/demoSeg_capD_WS.pdf}
+  \caption{\texttt{capsuleEnhance} (DoC mode) 2-D parameter sweep.
+    Block layout: 3 rows ($\mathtt{wideWidth} \in \{16, 20, 24\}$\,px)
+    $\times$ 6 columns (raw~$|$~$\alpha \in \{0.4, 0.5, 0.6, 0.7\}$~$|$~GT).
+    Inner width fixed at 10\,px; half-lengths $[12,16,20,24]$;
+    12 orientations.}
+  \label{fig:demoSeg-capD}
+\end{figure*}
+}{%
+\begin{quote}\textit{Run \texttt{demoSegmentation.m} with
+  \texttt{doExport = true} to generate
+  \texttt{demoSeg\_capD\_WS.pdf}.}\end{quote}
+}
+
+\IfFileExists{figures/demoSeg_rod_WS.pdf}{%
+\begin{figure*}
+  \includegraphics[width=\linewidth]{figures/demoSeg_rod_WS.pdf}
+  \caption{\texttt{rodGranulometryEnhance} parameter sweep.
+    Three full line-length configurations (12 orientations each):
+    $[16,20,28]$, $[20,28,36,48]$, $[16,20,28,36,48]$\,px.}
+  \label{fig:demoSeg-rod}
+\end{figure*}
+}{%
+\begin{quote}\textit{Run \texttt{demoSegmentation.m} with
+  \texttt{doExport = true} to generate
+  \texttt{demoSeg\_rod\_WS.pdf}.}\end{quote}
+}
+
+\IfFileExists{figures/demoSeg_HSV_overlay.pdf}{%
+\begin{figure*}
+  \includegraphics[width=\linewidth]{figures/demoSeg_HSV_overlay.pdf}
+  \caption{HSV overlay summary: best watershed result per enhancer compared
+    with the Cellpose ground truth.
+    Hue encodes instance identity (golden-ratio hue sequence, fixed seed for
+    reproducibility), saturation is 1 for labelled pixels and 0 for background
+    (rendered as greyscale), and value is the normalised original image
+    intensity.  This overlay combines instance colour with image texture,
+    making it straightforward to assess boundary placement alongside
+    segmentation accuracy.}
+  \label{fig:demoSeg-hsv}
+\end{figure*}
+}{%
+\begin{quote}\textit{Run \texttt{demoSegmentation.m} with
+  \texttt{doExport = true} to generate
+  \texttt{demoSeg\_HSV\_overlay.pdf}.}\end{quote}
+}
+
+% -------------------------------------------------------------------------
+\section{\texttt{sweepSegmentation}}
+\label{sec:sweepSeg}
+
+\newthought{sweepSegmentation} extends \texttt{demoSegmentation} with two
+additional analyses: a hysteresis vs.\ standard-threshold comparison and a
+boundary-refinement stage that applies \texttt{refineSegment} to each best
+watershed result.
+
+Two refinement methods are compared:
+\begin{description}
+  \item[\texttt{chanvese}] Chan--Vese active contours~\cite{Chan2001}
+    (\texttt{activecontour}, 100 iterations) expand or contract each
+    watershed object boundary to minimise a piecewise-constant energy
+    functional.  Useful when watershed boundaries are displaced by
+    intensity gradients.
+  \item[\texttt{dilate}] Voronoi-style dilation: each object is expanded
+    into its Voronoi territory up to a foreground intensity threshold,
+    then small fragments are removed.  Faster than Chan--Vese and often
+    sufficient for well-separated objects.
+\end{description}
+
+\noindent\textbf{Output.}\quad Console tables and three MATLAB figures
+(not exported to PDF):
+\begin{description}
+  \item[Figure~1] Best watershed result per enhancer vs.\ Cellpose GT\@.
+  \item[Figure~2] Refinement comparison for the top-ranked enhancer:
+    unrefined WS~$|$~$+$chanvese~$|$~$+$dilate~$|$~GT, with $\Delta$F1
+    annotations.
+  \item[Figure~3] Best hysteresis-threshold result per enhancer.
+\end{description}
+
+The console output includes three ranked tables: the full enhancer $\times$
+watershed sweep (F1 / Precision / Recall / IoU), a hysteresis vs.\
+standard-threshold $\Delta$F1 comparison, and a WS $\to$ chanvese / dilate
+refinement delta table.
+
 % =============================================================================
 \chapter{Unit Tests}
 \label{ch:tests}
@@ -941,6 +1117,12 @@ Cellpose3: one-click image restoration for improved cellular segmentation.
 Bigun~J. \& Granlund~G.H. (1987)
 Optimal orientation detection of linear symmetry.
 \textit{Proc.\ 1st IEEE ICCV}, pp.~433--438.
+
+\bibitem{Chan2001}
+Chan~T.F. \& Vese~L.A. (2001)
+Active contours without edges.
+\textit{IEEE Trans.\ Image Process.} \textbf{10}(2):266--277.
+\url{https://doi.org/10.1109/83.902291}
 
 \bibitem{Frangi1998}
 Frangi~A.F., Niessen~W.J., Vincken~K.L. \& Viergever~M.A. (1998)
