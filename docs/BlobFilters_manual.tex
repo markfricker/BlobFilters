@@ -8,10 +8,21 @@
 %%   geometry, amsmath, booktabs, graphicx, listings, microtype,
 %%   xcolor, hyperref  (all standard TeX Live / MiKTeX packages)
 %%
-%% Compile sequence (pdflatex only -- bibliography is inline \begin{thebibliography})
+%% Compile sequence (pdflatex only -- DO NOT run bibtex)
 %%   pdflatex BlobFilters_manual
 %%   pdflatex BlobFilters_manual
 %%
+%% If you see "duplicate identifier" warnings or a natbib author-year error:
+%%   delete BlobFilters_manual.bbl and BlobFilters_manual.aux, then recompile twice.
+%%   These are caused by a stale .bbl file from a previous bibtex run.
+%%
+%% NOTE: tufte-book loads natbib unconditionally. \PassOptionsToPackage below
+%% forces numeric citations so that bare \bibitem{key} entries are valid.
+%% Without this, natbib defaults to author-year mode and errors on our \bibitem.
+%
+% Force natbib (loaded by tufte-book) to use numeric citations.
+% Must appear before \documentclass so the option is set before natbib loads.
+\PassOptionsToPackage{numbers,sort&compress}{natbib}
 %% Figures
 %%   Generate all figure PDFs first by running docs/exportFigures.m in MATLAB.
 %%   They are expected in docs/figures/ relative to this file.
