@@ -83,7 +83,7 @@
 \label{ch:intro}
 
 \newthought{BlobFilters} is a MATLAB toolbox for enhancing elongated bright
-structures---rods, fibres and tubular networks---against a noisy fluorescence
+structures--- particularly rod-shaped organelles ---against a noisy fluorescence
 background. Its primary application is the detection and segmentation of
 mitochondria in confocal images, where individual organelles appear as either
 compact \emph{puncta} or elongated \emph{rods and networks} of approximately
@@ -201,6 +201,18 @@ pLog.normalize = true;
 R = logEnhance(I, pLog);
 \end{lstlisting}
 
+\subsection*{Mitochondria segmentation results}
+
+\begin{figure*}
+  \includegraphics[width=\linewidth]{figures/demoSeg_log_WS.pdf}
+  \caption{\texttt{logEnhance} parameter sweep on \texttt{mitImagecrop.mat}.
+    Columns: raw image~$|$~best-\mbox{F1} watershed result for each of four
+    $\sigma$ configurations ($[2\!-\!4]$, $[3\!-\!5]$, $[4\!-\!6]$,
+    $[3\!-\!6]$)~$|$~Cellpose GT (Figure~\ref{fig:gt-cyto3}).
+    Panel titles show the achieved F1 score and object count.}
+  \label{fig:demoSeg-log}
+\end{figure*}
+
 % -----------------------------------------------------------------------------
 \section{\texttt{granulometryEnhance}}
 \label{sec:gran}
@@ -242,6 +254,25 @@ G = granulometryEnhance(I, pGran);
 % =============================================================================
 \chapter{Rod and Fibre Detectors}
 \label{ch:rods}
+
+\newthought{The classical rod detectors} in this chapter are evaluated against
+\texttt{cellposeEnhance} (Section~\ref{sec:cellpose}) as the deep-learning
+reference baseline.  The ground truth used throughout is \texttt{cyto3} at
+$\mathtt{cellProb}=0$, $\mathtt{flowThreshold}=0.8$,
+$\mathtt{minSize}=64$\,px$^2$ (see Section~\ref{sec:cellpose-sweep} for the
+parameter sweep that selected these settings).
+
+\begin{figure*}
+  \includegraphics[width=\linewidth]{figures/cellpose_sweep_labels_cyto3.pdf}
+  \caption{Cellpose \texttt{cyto3} ground-truth segmentation on the cropped
+    mitochondria image (\texttt{mitImagecrop.mat}).
+    Column~1: raw image.  Columns 2--4: instance label maps
+    (\texttt{label2rgb}) for $\mathtt{flowThreshold} \in \{0.60, 0.80, 1.00\}$
+    at the recommended $\mathtt{cellProb}=0$.  The panel at
+    $\mathtt{flowThreshold}=0.80$ is used as ground truth for all
+    classical-enhancer sweeps below.  Black pixels are unlabelled background.}
+  \label{fig:gt-cyto3}
+\end{figure*}
 
 % -----------------------------------------------------------------------------
 \section{\texttt{fiberEnhance}}
@@ -288,6 +319,17 @@ pFib.multimode = 'builtin';
 pFib.normalize = true;
 R = fiberEnhance(I, pFib);
 \end{lstlisting}
+
+\subsection*{Mitochondria segmentation results}
+
+\begin{figure*}
+  \includegraphics[width=\linewidth]{figures/demoSeg_fib_WS.pdf}
+  \caption{\texttt{fiberEnhance} parameter sweep on \texttt{mitImagecrop.mat}.
+    Three cross-sectional width configurations (\texttt{stack} mode):
+    $\mathtt{widths}=[8,9,10]$, $[9,10,11,12]$, $[10,12,14]$,
+    benchmarked against the Cellpose GT (Figure~\ref{fig:gt-cyto3}).}
+  \label{fig:demoSeg-fib}
+\end{figure*}
 
 % -----------------------------------------------------------------------------
 \section{\texttt{capsuleEnhance}}
@@ -349,6 +391,28 @@ pCapD.mode      = 'doc';
 R_doc = capsuleEnhance(I, pCapD);
 \end{lstlisting}
 
+\subsection*{Mitochondria segmentation results}
+
+\begin{figure*}
+  \includegraphics[width=\linewidth]{figures/demoSeg_capS_WS.pdf}
+  \caption{\texttt{capsuleEnhance} (single mode) parameter sweep on
+    \texttt{mitImagecrop.mat}.
+    Three half-length / width configurations (12 orientations each):
+    $(\ell=[8,12,16], w=8)$, $([12,16,20], w=10)$, $([16,20,24], w=10)$,
+    benchmarked against the Cellpose GT (Figure~\ref{fig:gt-cyto3}).}
+  \label{fig:demoSeg-capS}
+\end{figure*}
+
+\begin{figure*}
+  \includegraphics[width=\linewidth]{figures/demoSeg_capD_WS.pdf}
+  \caption{\texttt{capsuleEnhance} (DoC mode) 2-D parameter sweep.
+    Block layout: 3 rows ($\mathtt{wideWidth} \in \{16, 20, 24\}$\,px)
+    $\times$ 6 columns (raw~$|$~$\alpha \in \{0.4, 0.5, 0.6, 0.7\}$~$|$~GT).
+    Inner width fixed at 10\,px; half-lengths $[12,16,20,24]$;
+    12 orientations.}
+  \label{fig:demoSeg-capD}
+\end{figure*}
+
 % -----------------------------------------------------------------------------
 \section{\texttt{rodGranulometryEnhance}}
 \label{sec:rodgran}
@@ -388,6 +452,18 @@ pRod.lengths      = [8 12 16 20 28 36];
 pRod.orientations = 8;
 R = rodGranulometryEnhance(I, pRod);
 \end{lstlisting}
+
+\subsection*{Mitochondria segmentation results}
+
+\begin{figure*}
+  \includegraphics[width=\linewidth]{figures/demoSeg_rod_WS.pdf}
+  \caption{\texttt{rodGranulometryEnhance} parameter sweep on
+    \texttt{mitImagecrop.mat}.
+    Three full line-length configurations (12 orientations each):
+    $[16,20,28]$, $[20,28,36,48]$, $[16,20,28,36,48]$\,px,
+    benchmarked against the Cellpose GT (Figure~\ref{fig:gt-cyto3}).}
+  \label{fig:demoSeg-rod}
+\end{figure*}
 
 % -----------------------------------------------------------------------------
 \section{\texttt{cellposeEnhance}}
@@ -933,79 +1009,19 @@ $\mathtt{minSize}=64$\,px$^2$.
         none / $0.20$ / $0.25$ (capsule).
 \end{itemize}
 
-\IfFileExists{figures/demoSeg_log_WS.pdf}{%
-\begin{figure*}
-  \includegraphics[width=\linewidth]{figures/demoSeg_log_WS.pdf}
-  \caption{\texttt{logEnhance} parameter sweep.
-    Columns: raw image~$|$~best-\mbox{F1} watershed result for each of the
-    four $\sigma$ configurations ($[2\!-\!4]$, $[3\!-\!5]$, $[4\!-\!6]$,
-    $[3\!-\!6]$)~$|$~Cellpose GT\@.
-    F1 score and object count are annotated in each panel.}
-  \label{fig:demoSeg-log}
-\end{figure*}
-}{%
-\begin{quote}\textit{Run \texttt{demoSegmentation.m} with
-  \texttt{doExport = true} to generate
-  \texttt{demoSeg\_log\_WS.pdf}.}\end{quote}
-}
-
-\IfFileExists{figures/demoSeg_fib_WS.pdf}{%
-\begin{figure*}
-  \includegraphics[width=\linewidth]{figures/demoSeg_fib_WS.pdf}
-  \caption{\texttt{fiberEnhance} parameter sweep.
-    Three cross-sectional width configurations (\texttt{stack} mode):
-    $\mathtt{widths}=[8,9,10]$, $[9,10,11,12]$, $[10,12,14]$.}
-  \label{fig:demoSeg-fib}
-\end{figure*}
-}{%
-\begin{quote}\textit{Run \texttt{demoSegmentation.m} with
-  \texttt{doExport = true} to generate
-  \texttt{demoSeg\_fib\_WS.pdf}.}\end{quote}
-}
-
-\IfFileExists{figures/demoSeg_capS_WS.pdf}{%
-\begin{figure*}
-  \includegraphics[width=\linewidth]{figures/demoSeg_capS_WS.pdf}
-  \caption{\texttt{capsuleEnhance} (single mode) parameter sweep.
-    Three half-length / width configurations (12 orientations each):
-    $(\ell=[8,12,16], w=8)$, $([12,16,20], w=10)$, $([16,20,24], w=10)$.}
-  \label{fig:demoSeg-capS}
-\end{figure*}
-}{%
-\begin{quote}\textit{Run \texttt{demoSegmentation.m} with
-  \texttt{doExport = true} to generate
-  \texttt{demoSeg\_capS\_WS.pdf}.}\end{quote}
-}
-
-\IfFileExists{figures/demoSeg_capD_WS.pdf}{%
-\begin{figure*}
-  \includegraphics[width=\linewidth]{figures/demoSeg_capD_WS.pdf}
-  \caption{\texttt{capsuleEnhance} (DoC mode) 2-D parameter sweep.
-    Block layout: 3 rows ($\mathtt{wideWidth} \in \{16, 20, 24\}$\,px)
-    $\times$ 6 columns (raw~$|$~$\alpha \in \{0.4, 0.5, 0.6, 0.7\}$~$|$~GT).
-    Inner width fixed at 10\,px; half-lengths $[12,16,20,24]$;
-    12 orientations.}
-  \label{fig:demoSeg-capD}
-\end{figure*}
-}{%
-\begin{quote}\textit{Run \texttt{demoSegmentation.m} with
-  \texttt{doExport = true} to generate
-  \texttt{demoSeg\_capD\_WS.pdf}.}\end{quote}
-}
-
-\IfFileExists{figures/demoSeg_rod_WS.pdf}{%
-\begin{figure*}
-  \includegraphics[width=\linewidth]{figures/demoSeg_rod_WS.pdf}
-  \caption{\texttt{rodGranulometryEnhance} parameter sweep.
-    Three full line-length configurations (12 orientations each):
-    $[16,20,28]$, $[20,28,36,48]$, $[16,20,28,36,48]$\,px.}
-  \label{fig:demoSeg-rod}
-\end{figure*}
-}{%
-\begin{quote}\textit{Run \texttt{demoSegmentation.m} with
-  \texttt{doExport = true} to generate
-  \texttt{demoSeg\_rod\_WS.pdf}.}\end{quote}
-}
+The per-enhancer sweep figures are presented in context alongside each
+algorithm's description:
+Figure~\ref{fig:demoSeg-log} (\texttt{logEnhance},
+Section~\ref{sec:log}),
+Figure~\ref{fig:demoSeg-fib} (\texttt{fiberEnhance},
+Section~\ref{sec:fiber}),
+Figures~\ref{fig:demoSeg-capS} and~\ref{fig:demoSeg-capD}
+(\texttt{capsuleEnhance} single and DoC modes,
+Section~\ref{sec:capsule}),
+and Figure~\ref{fig:demoSeg-rod} (\texttt{rodGranulometryEnhance},
+Section~\ref{sec:rodgran}).
+The HSV overlay below (Figure~\ref{fig:demoSeg-hsv}) brings all methods
+together for a direct comparison.
 
 \IfFileExists{figures/demoSeg_HSV_overlay.pdf}{%
 \begin{figure*}
