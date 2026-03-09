@@ -13,7 +13,7 @@
 %     fiberEnhance
 %     capsuleEnhance  (DoC)
 %     rodGranulometryEnhance
-%   Deep-learning  : cellposeEnhance(Ireal)  → binary mask + label image
+%   Deep-learning  : cellposeSegment(Ireal)  → label image + binary mask
 %                    Run on the original image (Cellpose normalises internally).
 %
 % FIGURES PRODUCED (real image only; synthetic toggled OFF)
@@ -92,7 +92,7 @@ pRodGran.lengths      = [8 12 16 20 28 36];
 pRodGran.orientations = 8;
 pRodGran.normalize    = true;
 
-% --- cellposeEnhance -----------------------------------------------------
+% --- cellposeSegment -----------------------------------------------------
 % cyto3: Cellpose 3 super-generalist model (Nature Methods 2025).
 %   Requires Python cellpose >= 3.x; weights auto-downloaded on first call.
 % cellProb = -2: relaxed threshold to recover faint / elongated mitochondria
@@ -144,12 +144,12 @@ fprintf('%.2fs\n', toc);
 % 5.  Cellpose on original image
 % =========================================================================
 fprintf('\n--- Cellpose ---\n');
-fprintf('  cellposeEnhance...        ');
+fprintf('  cellposeSegment...        ');
 hasCellpose = exist('cellpose', 'file') ~= 0;
 if hasCellpose
     try
         tic;
-        [cpMask, cpL] = cellposeEnhance(Ireal, pCP);
+        [cpL, cpMask] = cellposeSegment(Ireal, pCP);
         fprintf('%.2fs  (%d objects)\n', toc, max(cpL(:)));
     catch ME
         fprintf('SKIPPED (%s)\n', ME.message);

@@ -35,6 +35,11 @@ classdef testBlobFilters < matlab.unittest.TestCase
             rootDir = fullfile(fileparts(mfilename('fullpath')), '..');
             addpath(fullfile(rootDir, 'src'));
             addpath(fullfile(rootDir, 'demos'));
+            % cellposeSegment lives in Segmentation_sandbox/src (sibling repo)
+            segSrc = fullfile(rootDir, '..', 'Segmentation_sandbox', 'src');
+            if isfolder(segSrc)
+                addpath(segSrc);
+            end
         end
     end
 
@@ -399,7 +404,7 @@ classdef testBlobFilters < matlab.unittest.TestCase
     end
 
     % =====================================================================
-    %  cellposeEnhance
+    %  cellposeSegment
     %
     %  Tests that require Cellpose use tc.assumeTrue to mark themselves as
     %  Incomplete (not Failed) when the add-on is absent, consistent with
@@ -410,33 +415,33 @@ classdef testBlobFilters < matlab.unittest.TestCase
         function testCP_smoke(tc)
             tc.assumeTrue(exist('cellpose','file') ~= 0, ...
                 'Cellpose add-on not installed — test skipped');
-            [R, L] = cellposeEnhance(testBlobFilters.blobImage());
-            tc.verifyNotEmpty(R);
+            [L, R] = cellposeSegment(testBlobFilters.blobImage());
             tc.verifyNotEmpty(L);
+            tc.verifyNotEmpty(R);
         end
 
         function testCP_outputSize(tc)
             tc.assumeTrue(exist('cellpose','file') ~= 0, ...
                 'Cellpose add-on not installed — test skipped');
             I = testBlobFilters.blobImage();
-            [R, L] = cellposeEnhance(I);
-            tc.verifySize(R, size(I));
+            [L, R] = cellposeSegment(I);
             tc.verifySize(L, size(I));
+            tc.verifySize(R, size(I));
         end
 
         function testCP_outputClass(tc)
             tc.assumeTrue(exist('cellpose','file') ~= 0, ...
                 'Cellpose add-on not installed — test skipped');
-            [R, L] = cellposeEnhance(testBlobFilters.blobImage());
-            tc.verifyClass(R, 'single');
+            [L, R] = cellposeSegment(testBlobFilters.blobImage());
             tc.verifyClass(L, 'uint16');
+            tc.verifyClass(R, 'single');
         end
 
         function testCP_binaryRange(tc)
-            % R must be binary: all values exactly 0 or 1
+            % BW (second output) must be binary: all values exactly 0 or 1
             tc.assumeTrue(exist('cellpose','file') ~= 0, ...
                 'Cellpose add-on not installed — test skipped');
-            R = cellposeEnhance(testBlobFilters.blobImage());
+            [~, R] = cellposeSegment(testBlobFilters.blobImage());
             tc.verifyGreaterThanOrEqual(min(R(:)), single(0));
             tc.verifyLessThanOrEqual(   max(R(:)), single(1));
             uniqueVals = unique(R(:));
@@ -445,11 +450,11 @@ classdef testBlobFilters < matlab.unittest.TestCase
 
         function testCP_uniformImage_givesZero(tc)
             % A flat uniform image has no cell-like structure; Cellpose
-            % should detect no objects and return an all-zero binary mask.
+            % should detect no objects and return an all-zero label matrix.
             tc.assumeTrue(exist('cellpose','file') ~= 0, ...
                 'Cellpose add-on not installed — test skipped');
-            R = cellposeEnhance(testBlobFilters.uniformImage());
-            tc.verifyEqual(max(R(:)), single(0));
+            [L, ~] = cellposeSegment(testBlobFilters.uniformImage());
+            tc.verifyEqual(max(L(:)), uint16(0));
         end
 
         function testCP_toolboxMissing_errors(tc)
@@ -460,8 +465,8 @@ classdef testBlobFilters < matlab.unittest.TestCase
             tc.assumeFalse(exist('cellpose','file') ~= 0, ...
                 'Cellpose IS installed — missing-toolbox test not applicable');
             tc.verifyError( ...
-                @() cellposeEnhance(testBlobFilters.blobImage()), ...
-                'cellposeEnhance:notFound');
+                @() cellposeSegment(testBlobFilters.blobImage()), ...
+                'cellposeSegment:notFound');
         end
 
     end
